@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { DatabaseSchema, Record, SurveyData, ColumnDefinition } from '../types';
+import * as apiService from '../services/apiService';
 import Button from './common/Button';
 import Modal from './common/Modal';
 import Input from './common/Input';
@@ -34,35 +35,35 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
   const [view, setView] = useState<'table' | 'analytics'>('table');
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem('emerald-records', JSON.stringify(records));
-  }, [records]);
-
-  const handleSaveRecord = (record: Omit<Record, 'id'>, editingId: string | null) => {
+  const handleSaveRecord = async (recordData: Omit<Record, 'id'>, editingId: string | null) => {
     if (editingId) {
-      setRecords(records.map((r) => (r.id === editingId ? { ...r, ...record } : r)));
+      const updatedRecord = await apiService.updateRecord(editingId, recordData);
+      setRecords(records.map((r) => (r.id === editingId ? updatedRecord : r)));
     } else {
-      const newRecord = { ...record, id: `record_${Date.now()}` };
+      const newRecord = await apiService.addRecord(recordData);
       setRecords([newRecord, ...records]);
     }
   };
   
-  const handleDelete = (recordId: string) => {
+  const handleDelete = async (recordId: string) => {
     if (window.confirm('Are you sure you want to delete this record?')) {
+      await apiService.deleteRecord(recordId);
       setRecords(records.filter((r) => r.id !== recordId));
     }
   };
   
-  const handleBulkDelete = (recordIds: string[]) => {
+  const handleBulkDelete = async (recordIds: string[]) => {
       if (window.confirm(`Are you sure you want to delete ${recordIds.length} selected records?`)) {
+          await apiService.deleteBulkRecords(recordIds);
           setRecords(records.filter((r) => !recordIds.includes(r.id)));
       }
   };
 
-  const handleAiUpdateRecord = (recordId: string, updates: Partial<Omit<Record, 'id'>>) => {
+  const handleAiUpdateRecord = async (recordId: string, updates: Partial<Omit<Record, 'id'>>) => {
+    const updatedRecord = await apiService.updateRecord(recordId, updates);
     setRecords(prevRecords =>
       prevRecords.map(r =>
-        r.id === recordId ? { ...r, ...updates } : r
+        r.id === recordId ? updatedRecord : r
       )
     );
   };

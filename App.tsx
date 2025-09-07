@@ -3,6 +3,7 @@ import LoginScreen from './components/LoginScreen';
 import SurveyScreen from './components/SurveyScreen';
 import DashboardScreen from './components/DashboardScreen';
 import { generateSchemaAndData } from './services/geminiService';
+import * as apiService from './services/apiService';
 import type { DatabaseSchema, Record, SurveyData } from './types';
 import LogoIcon from './components/icons/LogoIcon';
 
@@ -14,27 +15,29 @@ const App: React.FC = () => {
   const [records, setRecords] = useState<Record[]>([]);
 
   useEffect(() => {
-    try {
-      const savedIsLoggedIn = localStorage.getItem('emerald-isLoggedIn');
-      const savedSurveyData = localStorage.getItem('emerald-surveyData');
-      const savedSchema = localStorage.getItem('emerald-schema');
-      const savedRecords = localStorage.getItem('emerald-records');
-
-      if (savedIsLoggedIn === 'true') {
-        setIsLoggedIn(true);
-        if (savedSurveyData && savedSchema && savedRecords) {
-          setSurveyData(JSON.parse(savedSurveyData));
-          setSchema(JSON.parse(savedSchema));
-          setRecords(JSON.parse(savedRecords));
+    const loadInitialData = async () => {
+      try {
+        const savedIsLoggedIn = localStorage.getItem('emerald-isLoggedIn');
+        if (savedIsLoggedIn === 'true') {
+          setIsLoggedIn(true);
+          const savedSurveyData = apiService.getSurveyData();
+          const savedSchema = apiService.getSchema();
+          
+          if (savedSurveyData && savedSchema) {
+            setSurveyData(savedSurveyData);
+            setSchema(savedSchema);
+            const savedRecords = await apiService.getRecords();
+            setRecords(savedRecords);
+          }
         }
+      } catch (error) {
+        console.error("Failed to load data", error);
+        localStorage.clear();
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Failed to load data from localStorage", error);
-      // Clear potentially corrupted storage
-      localStorage.clear();
-    } finally {
-      setIsLoading(false);
-    }
+    };
+    loadInitialData();
   }, []);
 
   const handleLogin = () => {
@@ -47,13 +50,15 @@ const App: React.FC = () => {
     try {
       const result = await generateSchemaAndData(occupation, dataType);
       const newSurveyData = { occupation, dataType };
+      
+      await apiService.saveSchema(result.schema);
+      await apiService.saveSurveyData(newSurveyData);
+      await apiService.saveAllRecords(result.sampleData);
+
       setSurveyData(newSurveyData);
       setSchema(result.schema);
       setRecords(result.sampleData);
       
-      localStorage.setItem('emerald-surveyData', JSON.stringify(newSurveyData));
-      localStorage.setItem('emerald-schema', JSON.stringify(result.schema));
-      localStorage.setItem('emerald-records', JSON.stringify(result.sampleData));
     } catch (error) {
       console.error("Failed to generate schema:", error);
       alert("There was an error generating your database schema. Please try again.");
@@ -70,11 +75,9 @@ const App: React.FC = () => {
     setRecords([]);
   };
 
-  const resetSurvey = () => {
+  const resetSurvey = async () => {
     if(window.confirm("Are you sure you want to reset your database? This will erase your current schema and all records.")) {
-        localStorage.removeItem('emerald-surveyData');
-        localStorage.removeItem('emerald-schema');
-        localStorage.removeItem('emerald-records');
+        await apiService.clearDatabase();
         setSurveyData(null);
         setSchema(null);
         setRecords([]);
