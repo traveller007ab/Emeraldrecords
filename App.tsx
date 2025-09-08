@@ -20,19 +20,18 @@ const App: React.FC = () => {
         const savedIsLoggedIn = localStorage.getItem('emerald-isLoggedIn');
         if (savedIsLoggedIn === 'true') {
           setIsLoggedIn(true);
-          const savedSurveyData = apiService.getSurveyData();
-          const savedSchema = apiService.getSchema();
+          const settings = await apiService.getSettings();
           
-          if (savedSurveyData && savedSchema) {
-            setSurveyData(savedSurveyData);
-            setSchema(savedSchema);
+          if (settings.surveyData && settings.schema) {
+            setSurveyData(settings.surveyData);
+            setSchema(settings.schema);
             const savedRecords = await apiService.getRecords();
             setRecords(savedRecords);
           }
         }
       } catch (error) {
-        console.error("Failed to load data", error);
-        localStorage.clear();
+        console.error("Failed to load data from backend", error);
+        // Could show a "can't connect to server" message
       } finally {
         setIsLoading(false);
       }
@@ -51,16 +50,18 @@ const App: React.FC = () => {
       const result = await generateSchemaAndData(occupation, dataType);
       const newSurveyData = { occupation, dataType };
       
-      await apiService.saveSchema(result.schema);
-      await apiService.saveSurveyData(newSurveyData);
-      await apiService.saveAllRecords(result.sampleData);
+      // Use the new single endpoint for setup
+      await apiService.setupDatabase(result.schema, newSurveyData, result.sampleData);
+
+      // Fetch the newly created records from the DB to get real UUIDs
+      const serverRecords = await apiService.getRecords();
 
       setSurveyData(newSurveyData);
       setSchema(result.schema);
-      setRecords(result.sampleData);
+      setRecords(serverRecords);
       
     } catch (error) {
-      console.error("Failed to generate schema:", error);
+      console.error("Failed to generate and setup schema:", error);
       alert("There was an error generating your database schema. Please try again.");
     } finally {
       setIsLoading(false);

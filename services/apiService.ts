@@ -1,96 +1,75 @@
 import type { DatabaseSchema, Record, SurveyData } from '../types';
 
-const RECORDS_KEY = 'emerald-records';
-const SCHEMA_KEY = 'emerald-schema';
-const SURVEY_DATA_KEY = 'emerald-surveyData';
+const API_BASE_URL = 'http://localhost:3001/api';
 
-// Simulate network latency
-const FAKE_DELAY = 200;
-
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
-
-// --- Schema ---
-export const saveSchema = async (schema: DatabaseSchema): Promise<void> => {
-    await delay(FAKE_DELAY);
-    localStorage.setItem(SCHEMA_KEY, JSON.stringify(schema));
+const headers = {
+  'Content-Type': 'application/json',
 };
 
-export const getSchema = (): DatabaseSchema | null => {
-    const savedSchema = localStorage.getItem(SCHEMA_KEY);
-    return savedSchema ? JSON.parse(savedSchema) : null;
-};
+// --- Combined Setup ---
+export const setupDatabase = async (schema: DatabaseSchema, surveyData: SurveyData, sampleData: Record[]): Promise<void> => {
+    await fetch(`${API_BASE_URL}/setup`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ schema, surveyData, sampleData }),
+    });
+}
 
-// --- Survey Data ---
-export const saveSurveyData = async (surveyData: SurveyData): Promise<void> => {
-    await delay(FAKE_DELAY);
-    localStorage.setItem(SURVEY_DATA_KEY, JSON.stringify(surveyData));
-};
-
-export const getSurveyData = (): SurveyData | null => {
-    const savedData = localStorage.getItem(SURVEY_DATA_KEY);
-    return savedData ? JSON.parse(savedData) : null;
+// --- Settings ---
+interface SettingsPayload {
+    schema: DatabaseSchema | null;
+    surveyData: SurveyData | null;
+}
+export const getSettings = async (): Promise<SettingsPayload> => {
+    const response = await fetch(`${API_BASE_URL}/settings`);
+    if (!response.ok) throw new Error('Failed to fetch settings');
+    return response.json();
 };
 
 // --- Records ---
 export const getRecords = async (): Promise<Record[]> => {
-    await delay(FAKE_DELAY);
-    const savedRecords = localStorage.getItem(RECORDS_KEY);
-    return savedRecords ? JSON.parse(savedRecords) : [];
+    const response = await fetch(`${API_BASE_URL}/records`);
+    if (!response.ok) throw new Error('Failed to fetch records');
+    return response.json();
 };
 
-export const saveAllRecords = async (records: Record[]): Promise<void> => {
-    await delay(FAKE_DELAY);
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-}
-
 export const addRecord = async (recordData: Omit<Record, 'id'>): Promise<Record> => {
-    await delay(FAKE_DELAY);
-    const records = await getRecords();
-    const newRecord: Record = {
-        ...recordData,
-        id: `record_${Date.now()}_${Math.random()}`
-    };
-    const updatedRecords = [newRecord, ...records];
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(updatedRecords));
-    return newRecord;
+    const response = await fetch(`${API_BASE_URL}/records`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(recordData),
+    });
+    if (!response.ok) throw new Error('Failed to add record');
+    return response.json();
 };
 
 export const updateRecord = async (recordId: string, updates: Partial<Omit<Record, 'id'>>): Promise<Record> => {
-    await delay(FAKE_DELAY);
-    const records = await getRecords();
-    let updatedRecord: Record | undefined;
-    const updatedRecords = records.map(r => {
-        if (r.id === recordId) {
-            updatedRecord = { ...r, ...updates };
-            return updatedRecord;
-        }
-        return r;
+    const response = await fetch(`${API_BASE_URL}/records/${recordId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(updates),
     });
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(updatedRecords));
-    if (!updatedRecord) {
-        throw new Error(`Record with id ${recordId} not found.`);
-    }
-    return updatedRecord;
+    if (!response.ok) throw new Error('Failed to update record');
+    return response.json();
 };
 
 export const deleteRecord = async (recordId: string): Promise<void> => {
-    await delay(FAKE_DELAY);
-    const records = await getRecords();
-    const updatedRecords = records.filter(r => r.id !== recordId);
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(updatedRecords));
+    await fetch(`${API_BASE_URL}/records`, {
+        method: 'DELETE',
+        headers,
+        body: JSON.stringify({ ids: [recordId] }),
+    });
 };
 
 export const deleteBulkRecords = async (recordIds: string[]): Promise<void> => {
-    await delay(FAKE_DELAY);
-    const records = await getRecords();
-    const updatedRecords = records.filter(r => !recordIds.includes(r.id));
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(updatedRecords));
+    await fetch(`${API_BASE_URL}/records`, {
+        method: 'DELETE',
+        headers,
+        body: JSON.stringify({ ids: recordIds }),
+    });
 };
 
 // --- Utility ---
 export const clearDatabase = async (): Promise<void> => {
-    await delay(FAKE_DELAY);
-    localStorage.removeItem(RECORDS_KEY);
-    localStorage.removeItem(SCHEMA_KEY);
-    localStorage.removeItem(SURVEY_DATA_KEY);
+     await fetch(`${API_BASE_URL}/clear`, { method: 'POST' });
 };
