@@ -35,6 +35,30 @@ const buildTools = (schema: DatabaseSchema) => {
     return [{
         functionDeclarations: [
             {
+                name: "searchRecords",
+                description: "Searches for records in the table based on a set of filters. Use this for any query that asks to find or list records.",
+                parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                        filters: {
+                            type: Type.ARRAY,
+                            description: "An array of filter conditions to apply.",
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    columnId: { type: Type.STRING, description: "The ID of the column to filter on." },
+                                    operator: { type: Type.STRING, description: "The operator. Supported: 'EQUALS', 'CONTAINS', 'GREATER_THAN', 'LESS_THAN', 'NOT_EQUALS'." },
+                                    value: { type: Type.STRING, description: "The value to compare against." }
+                                },
+                                required: ["columnId", "operator", "value"]
+                            }
+                        },
+                        responseMessage: { type: Type.STRING, description: "A message to the user summarizing the search action. e.g., 'Sure, here are all tasks that are in progress.'" }
+                    },
+                    required: ["filters", "responseMessage"]
+                },
+            },
+            {
                 name: "createRecord",
                 description: "Creates a new record in the table.",
                 parameters: {
@@ -111,11 +135,13 @@ async function handleAiResponse({ tableName, schema, chatHistory }: { tableName:
 
     const systemInstruction = `
         You are an AI assistant that helps users manage their data in a table named "${tableName}".
-        The user will describe a change, and you will call the appropriate function ('createRecord', 'updateRecord', 'deleteRecord').
+        The user will describe a change or ask a question, and you will call the appropriate function ('searchRecords', createRecord', 'updateRecord', 'deleteRecord').
 
         **Core Rules:**
-        1.  **Tool Use**: You MUST use the provided tools to perform any data modification. Do not just respond with text.
-        2.  **Confirmation**: You MUST create a clear, concise confirmation message for the user for every tool call.
+        1.  **Tool Use**: You MUST use the provided tools to perform any data search or modification. Do not just respond with text if a tool is appropriate.
+        2.  **Confirmation/Response Messages**:
+            *   For actions ('create', 'update', 'delete'), you MUST create a clear, concise **confirmation** message for the user.
+            *   For 'searchRecords', you MUST create a **response** message that summarizes the search being performed.
         3.  **Clarification**: If the user's request is ambiguous (e.g., they ask to delete a record without specifying an ID), ask clarifying questions instead of calling a tool.
         4.  **Schema Adherence**: The data you provide in tool calls MUST match the schema.
         

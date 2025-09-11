@@ -14,6 +14,16 @@ export interface Record {
   [key: string]: any;
 }
 
+// Search and Filter Types
+export type FilterOperator = 'EQUALS' | 'CONTAINS' | 'GREATER_THAN' | 'LESS_THAN' | 'NOT_EQUALS';
+
+export interface Filter {
+  columnId: string;
+  operator: FilterOperator;
+  value: any;
+}
+
+
 // AI Interaction Types
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -21,11 +31,13 @@ export interface ChatMessage {
 }
 
 export interface ToolCallPayload {
-  name: 'createRecord' | 'updateRecord' | 'deleteRecord';
+  name: 'createRecord' | 'updateRecord' | 'deleteRecord' | 'searchRecords';
   args: {
     record?: Partial<Omit<Record, 'id' | 'created_at'>>;
     recordId?: string;
-    confirmationMessage: string;
+    filters?: Filter[];
+    confirmationMessage?: string; // Optional for search
+    responseMessage?: string; // For search results
   };
 }
 

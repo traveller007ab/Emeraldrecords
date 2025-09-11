@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { DatabaseSchema, ChatMessage, ToolCallPayload, Record } from '../types';
+import type { DatabaseSchema, ChatMessage, ToolCallPayload, Record, Filter } from '../types';
 import { getAiResponse } from '../services/geminiService';
 import Button from './common/Button';
 import Input from './common/Input';
@@ -16,11 +16,12 @@ interface AiChatAssistantProps {
   onCreateRecord: (newRecord: Omit<Record, 'id' | 'created_at'>) => void;
   onUpdateRecord: (recordId: string, updates: Partial<Omit<Record, 'id'>>) => void;
   onDeleteRecord: (recordId: string) => void;
+  onSearch: (filters: Filter[]) => void;
 }
 
-const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, onClose, onCreateRecord, onUpdateRecord, onDeleteRecord }) => {
+const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, onClose, onCreateRecord, onUpdateRecord, onDeleteRecord, onSearch }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'model', content: `Hello! I can help you manage your "${tableName}" table. \n\nFor example, try: 'Add a new record' or 'Delete the record with ID 5'.` }
+    { role: 'model', content: `Hello! I can help you manage your "${tableName}" table. \n\nTry asking: 'Find all records where status is complete' or 'Create a new record'.` }
   ]);
   const [userInput, setUserInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -47,12 +48,22 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, on
       const textResponse = response.text;
 
       if (toolCall) {
-        const message = toolCall.args?.confirmationMessage;
-        if (typeof message === 'string' && message) {
-          setMessages(prev => [...prev, { role: 'model', content: message }]);
-          setPendingToolCall(toolCall);
+        if (toolCall.name === 'searchRecords') {
+            const message = toolCall.args?.responseMessage;
+            if (typeof message === 'string' && message) {
+                setMessages(prev => [...prev, { role: 'model', content: message }]);
+            }
+            if (toolCall.args.filters) {
+                onSearch(toolCall.args.filters);
+            }
         } else {
-          setMessages(prev => [...prev, { role: 'model', content: "Sorry, the AI's response was incomplete. Please try again." }]);
+            const message = toolCall.args?.confirmationMessage;
+            if (typeof message === 'string' && message) {
+              setMessages(prev => [...prev, { role: 'model', content: message }]);
+              setPendingToolCall(toolCall);
+            } else {
+              setMessages(prev => [...prev, { role: 'model', content: "Sorry, the AI's response was incomplete. Please try again." }]);
+            }
         }
       } else if (textResponse) {
         setMessages(prev => [...prev, { role: 'model', content: textResponse }]);
@@ -90,6 +101,7 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, on
               } else { throw new Error("Missing record ID for deletion."); }
               break;
           default:
+              // searchRecords is handled directly, so it won't reach here.
               console.error(`Unknown tool call name: ${name}`);
               throw new Error("Unknown action requested.");
       }

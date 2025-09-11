@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import type { DatabaseSchema, Record, ColumnDefinition } from '../types';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import type { DatabaseSchema, Record, ColumnDefinition, Filter, FilterOperator } from '../types';
 import Button from './common/Button';
 import Modal from './common/Modal';
 import Input from './common/Input';
@@ -11,21 +11,53 @@ import SortDescIcon from './icons/SortDescIcon';
 import SearchIcon from './icons/SearchIcon';
 import CloseIcon from './icons/CloseIcon';
 import ExportIcon from './icons/ExportIcon';
+import FilterIcon from './icons/FilterIcon';
 
 interface TableViewProps {
   schema: DatabaseSchema;
   records: Record[];
+  filters: Filter[];
+  onFiltersChange: (filters: Filter[]) => void;
   onUpdateRecord: (recordId: string, updates: Partial<Omit<Record, 'id'>>) => void;
   onCreateRecord: (newRecord: Omit<Record, 'id' | 'created_at'>) => void;
   onDeleteRecord: (recordId: string) => void;
 }
 
-const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, onCreateRecord, onDeleteRecord }) => {
+const FilterPill: React.FC<{ filter: Filter, schema: DatabaseSchema, onRemove: () => void }> = ({ filter, schema, onRemove }) => {
+    const column = schema.find(c => c.id === filter.columnId);
+    if (!column) return null;
+    return (
+        <span className="flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 text-xs font-medium px-2 py-1 rounded-full">
+            {column.name} <span className="text-slate-400">{filter.operator.toLowerCase()}</span> "{filter.value}"
+            <button onClick={onRemove} className="text-emerald-300 hover:text-white"><CloseIcon className="w-3 h-3" /></button>
+        </span>
+    );
+};
+
+const TableView: React.FC<TableViewProps> = ({ schema, records, filters, onFiltersChange, onUpdateRecord, onCreateRecord, onDeleteRecord }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRecord, setEditingRecord] = useState<Partial<Record> | null>(null);
     const [sortColumn, setSortColumn] = useState<string>('created_at');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [searchTerm, setSearchTerm] = useState('');
+
+    const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+    const filterMenuRef = useRef<HTMLDivElement>(null);
+    
+    // State for the new filter being built
+    const [newFilterColumn, setNewFilterColumn] = useState<string>(schema[0]?.id || '');
+    const [newFilterOperator, setNewFilterOperator] = useState<FilterOperator>('EQUALS');
+    const [newFilterValue, setNewFilterValue] = useState('');
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+                setIsFilterMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     const handleSort = (columnId: string) => {
         if (sortColumn === columnId) {
@@ -51,15 +83,41 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
     }, [records, sortColumn, sortDirection]);
 
     const filteredRecords = useMemo(() => {
-        if (!searchTerm) {
-            return sortedRecords;
+        let recordsToFilter = [...sortedRecords];
+
+        // Apply structured filters
+        if (filters.length > 0) {
+            recordsToFilter = recordsToFilter.filter(record => {
+                return filters.every(filter => {
+                    const recordValue = record[filter.columnId];
+                    if (recordValue === null || recordValue === undefined) return false;
+                    const recordValueStr = String(recordValue).toLowerCase();
+                    const filterValueStr = String(filter.value).toLowerCase();
+
+                    switch (filter.operator) {
+                        case 'EQUALS': return recordValueStr === filterValueStr;
+                        case 'NOT_EQUALS': return recordValueStr !== filterValueStr;
+                        case 'CONTAINS': return recordValueStr.includes(filterValueStr);
+                        case 'GREATER_THAN': return Number(recordValue) > Number(filter.value);
+                        case 'LESS_THAN': return Number(recordValue) < Number(filter.value);
+                        default: return true;
+                    }
+                });
+            });
         }
-        return sortedRecords.filter(record => {
-            return Object.values(record).some(value =>
-                String(value).toLowerCase().includes(searchTerm.toLowerCase())
-            );
-        });
-    }, [sortedRecords, searchTerm]);
+
+        // Apply free-text search
+        if (searchTerm) {
+            recordsToFilter = recordsToFilter.filter(record => {
+                return Object.values(record).some(value =>
+                    String(value).toLowerCase().includes(searchTerm.toLowerCase())
+                );
+            });
+        }
+
+        return recordsToFilter;
+    }, [sortedRecords, searchTerm, filters]);
+
 
     const openCreateModal = () => {
         setEditingRecord({});
@@ -196,40 +254,91 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
         link.click();
         document.body.removeChild(link);
     };
+    
+    const handleAddFilter = () => {
+        if (!newFilterValue.trim()) return;
+        const newFilter: Filter = {
+            columnId: newFilterColumn,
+            operator: newFilterOperator,
+            value: newFilterValue,
+        };
+        onFiltersChange([...filters, newFilter]);
+        setNewFilterValue('');
+        setIsFilterMenuOpen(false);
+    };
+    
+    const handleRemoveFilter = (index: number) => {
+        onFiltersChange(filters.filter((_, i) => i !== index));
+    };
 
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                <div className="relative w-full sm:max-w-xs">
-                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                        <SearchIcon className="w-5 h-5 text-slate-400" />
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {/* Search Input */}
+                    <div className="relative w-full sm:max-w-xs">
+                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <SearchIcon className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <Input
+                            type="text"
+                            placeholder="Search records..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10 !py-2"
+                        />
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="absolute inset-y-0 right-0 flex items-center pr-3"
+                                aria-label="Clear search"
+                            >
+                                <CloseIcon className="w-5 h-5 text-slate-400 hover:text-white" />
+                            </button>
+                        )}
                     </div>
-                    <Input
-                        type="text"
-                        placeholder="Search records..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 !py-2"
-                    />
-                    {searchTerm && (
-                        <button
-                            onClick={() => setSearchTerm('')}
-                            className="absolute inset-y-0 right-0 flex items-center pr-3"
-                            aria-label="Clear search"
-                        >
-                            <CloseIcon className="w-5 h-5 text-slate-400 hover:text-white" />
-                        </button>
-                    )}
+                    {/* Filter Button & Menu */}
+                    <div className="relative" ref={filterMenuRef}>
+                        <Button onClick={() => setIsFilterMenuOpen(prev => !prev)} variant="secondary" size="sm" className="!py-2">
+                            <FilterIcon className="h-4 w-4 mr-2"/> Filter
+                        </Button>
+                        {isFilterMenuOpen && (
+                            <div className="absolute top-full mt-2 w-80 bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-4 z-20 space-y-3">
+                                <h4 className="font-semibold text-white">Add a filter</h4>
+                                <select value={newFilterColumn} onChange={e => setNewFilterColumn(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded-md p-2 text-sm">
+                                    {schema.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                                </select>
+                                <select value={newFilterOperator} onChange={e => setNewFilterOperator(e.target.value as FilterOperator)} className="w-full bg-slate-900 border border-slate-600 rounded-md p-2 text-sm">
+                                    <option value="EQUALS">Equals</option>
+                                    <option value="NOT_EQUALS">Not Equals</option>
+                                    <option value="CONTAINS">Contains</option>
+                                    <option value="GREATER_THAN">Greater Than</option>
+                                    <option value="LESS_THAN">Less Than</option>
+                                </select>
+                                <Input type="text" placeholder="Value..." value={newFilterValue} onChange={e => setNewFilterValue(e.target.value)} className="!py-2 text-sm" />
+                                <Button onClick={handleAddFilter} size="sm" fullWidth>Apply Filter</Button>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button onClick={handleExportCsv} size="sm" variant="secondary" disabled={filteredRecords.length === 0}>
-                        <ExportIcon className="h-4 w-4 mr-2"/> Export CSV
+                        <ExportIcon className="h-4 w-4 mr-2"/> Export
                     </Button>
                     <Button onClick={openCreateModal} size="sm">
                         <PlusIcon className="h-4 w-4 mr-2"/> Add Record
                     </Button>
                 </div>
             </div>
+             {/* Active Filters Display */}
+            {filters.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap mb-4">
+                    {filters.map((filter, index) => (
+                        <FilterPill key={index} filter={filter} schema={schema} onRemove={() => handleRemoveFilter(index)} />
+                    ))}
+                    <button onClick={() => onFiltersChange([])} className="text-xs text-slate-400 hover:text-white hover:underline">Clear all</button>
+                </div>
+            )}
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-slate-300">
                     <thead className="text-xs text-slate-400 uppercase bg-slate-700/50">
@@ -278,8 +387,8 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
                 </table>
                  {filteredRecords.length === 0 && (
                     <p className="text-center py-8 text-slate-500">
-                        {searchTerm 
-                            ? `No records match your search for "${searchTerm}".`
+                        {records.length > 0
+                            ? `No records match your search criteria.`
                             : 'No records found. Click "Add Record" to get started.'
                         }
                     </p>

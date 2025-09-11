@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { DatabaseSchema, Record } from '../types';
+import type { DatabaseSchema, Record, Filter } from '../types';
 import Button from './common/Button';
 import AiChatAssistant from './AiChatAssistant';
 import LogoIcon from './icons/LogoIcon';
@@ -40,11 +40,13 @@ const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
   const [records, setRecords] = useState<Record[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filter[]>([]);
 
   const fetchData = useCallback(async () => {
     if (!selectedTable) return;
     setIsLoading(true);
     setError(null);
+    setFilters([]); // Reset filters when table changes
     try {
         const [fetchedSchema, fetchedRecords] = await Promise.all([
             apiService.getTableSchema(selectedTable),
@@ -101,6 +103,11 @@ const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
     }
   }
 
+  const handleSearch = (newFilters: Filter[]) => {
+    setFilters(newFilters);
+    setActiveTab('table'); // Switch to table view to show results
+  };
+
 
   const renderContent = () => {
     if (isLoading) {
@@ -118,6 +125,8 @@ const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
         return <TableView 
             schema={schema} 
             records={records}
+            filters={filters}
+            onFiltersChange={setFilters}
             onUpdateRecord={handleUpdateRecord}
             onCreateRecord={handleCreateRecord}
             onDeleteRecord={handleDeleteRecord}
@@ -184,6 +193,7 @@ const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
           onCreateRecord={handleCreateRecord}
           onUpdateRecord={handleUpdateRecord}
           onDeleteRecord={handleDeleteRecord}
+          onSearch={handleSearch}
         />
        )}
     </div>
