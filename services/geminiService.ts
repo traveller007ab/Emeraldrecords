@@ -1,7 +1,7 @@
-import type { DatabaseSchema, Record, ChartConfig, ChatMessage } from '../types';
+import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig } from '../types';
 
 interface ApiRequestBody {
-    action: 'generateSchema' | 'generateChart' | 'chat';
+    action: 'generateSchema' | 'generateChart' | 'chat' | 'generateKanban';
     payload: any;
 }
 
@@ -40,6 +40,13 @@ export const generateChartAnalytics = async (
     records: Record[]
 ): Promise<ChartConfig> => {
     return fetchFromApi('generateChart', { schema, records });
+}
+
+export const generateKanbanConfig = async (
+    schema: DatabaseSchema,
+    records: Record[]
+): Promise<KanbanConfig> => {
+    return fetchFromApi('generateKanban', { schema, records });
 }
 
 

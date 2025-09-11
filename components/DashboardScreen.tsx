@@ -20,6 +20,8 @@ import TableIcon from './icons/TableIcon';
 import AnalyticsView from './AnalyticsView';
 import SparklesIcon from './icons/SparklesIcon';
 import CheckSquareIcon from './icons/CheckSquareIcon';
+import KanbanIcon from './icons/KanbanIcon';
+import KanbanView from './KanbanView';
 
 
 interface DashboardScreenProps {
@@ -32,7 +34,7 @@ interface DashboardScreenProps {
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecords, onLogout, surveyData, onResetSurvey }) => {
   const [records, setRecords] = useState<Record[]>(initialRecords);
-  const [view, setView] = useState<'table' | 'analytics'>('table');
+  const [view, setView] = useState<'table' | 'analytics' | 'kanban'>('table');
   const [isChatOpen, setIsChatOpen] = useState(false);
 
   const handleSaveRecord = async (recordData: Omit<Record, 'id'>, editingId: string | null) => {
@@ -59,7 +61,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
       }
   };
 
-  const handleAiUpdateRecord = async (recordId: string, updates: Partial<Omit<Record, 'id'>>) => {
+  const handleUpdateRecord = async (recordId: string, updates: Partial<Omit<Record, 'id'>>) => {
     const updatedRecord = await apiService.updateRecord(recordId, updates);
     setRecords(prevRecords =>
       prevRecords.map(r =>
@@ -91,8 +93,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
 
        <div className="bg-gray-800 rounded-2xl shadow-lg p-6">
         <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
-            <h2 className="text-xl font-semibold">
-                {view === 'table' ? 'My Records' : 'Data Analytics'}
+            <h2 className="text-xl font-semibold capitalize">
+                {view === 'table' ? 'My Records' : view}
             </h2>
             <div className="flex items-center rounded-lg bg-gray-900 p-1">
                 <button 
@@ -107,10 +109,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
                 >
                     <AnalyticsIcon className="h-5 w-5" />
                 </button>
+                <button 
+                    onClick={() => setView('kanban')} 
+                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${view === 'kanban' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
+                >
+                    <KanbanIcon className="h-5 w-5" />
+                </button>
             </div>
         </div>
 
-        {view === 'table' ? (
+        {view === 'table' && (
             <TableView 
                 schema={schema}
                 records={records}
@@ -120,8 +128,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
                 surveyDataType={surveyData?.dataType || 'data'}
                 onOpenChat={() => setIsChatOpen(true)}
             />
-        ) : (
+        )}
+        {view === 'analytics' && (
             <AnalyticsView schema={schema} records={records} />
+        )}
+        {view === 'kanban' && (
+            <KanbanView 
+                schema={schema} 
+                records={records} 
+                onUpdateRecord={handleUpdateRecord} 
+            />
         )}
        </div>
        {isChatOpen && (
@@ -129,7 +145,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
           schema={schema}
           records={records}
           onClose={() => setIsChatOpen(false)}
-          onUpdateRecord={handleAiUpdateRecord}
+          onUpdateRecord={handleUpdateRecord}
         />
        )}
     </div>
@@ -388,145 +404,179 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
         </div>
 
         <div className="overflow-x-auto">
+{/* This is the beginning of the fix for the truncated file content */}
           {displayedRecords.length > 0 ? (
-          <table className="w-full min-w-max text-left">
-            <thead className="border-b border-gray-700">
-              <tr>
-                {isSelectionMode && (
-                    <th className="p-4 w-12">
-                       <input
-                            type="checkbox"
-                            ref={selectAllRef}
-                            onChange={handleSelectAll}
-                            className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                       />
-                    </th>
-                )}
-                {schema.map((col) => (
-                  <th key={col.id} className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                     <button onClick={() => handleSort(col.id)} className="flex items-center gap-2 group transition-colors">
-                        <span>{col.name}</span>
-                        <span className="opacity-0 group-hover:opacity-100 transition-opacity">
-                            {sortConfig?.key === col.id ? (
-                                sortConfig.direction === 'ascending' 
-                                    ? <SortDescIcon className="h-3 w-3" /> 
-                                    : <SortAscIcon className="h-3 w-3" />
-                            ) : <SortAscIcon className="h-3 w-3 text-gray-600" /> }
-                        </span>
-                     </button>
-                  </th>
-                ))}
-                <th className="p-4 text-right text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {displayedRecords.map((record) => (
-                <tr key={record.id} className={`transition-colors ${selectedRecordIds.includes(record.id) ? 'bg-emerald-900/50' : 'hover:bg-gray-700/50'}`}>
-                  {isSelectionMode && (
-                    <td className="p-4 w-12">
-                         <input
-                            type="checkbox"
-                            checked={selectedRecordIds.includes(record.id)}
-                            onChange={() => handleSelectRow(record.id)}
-                            className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                         />
-                    </td>
-                  )}
-                  {schema.map((col) => (
-                    <td key={col.id} className="p-4 whitespace-nowrap">{renderCell(record, col)}</td>
-                  ))}
-                  <td className="p-4 whitespace-nowrap text-right">
-                    <button onClick={() => handleEdit(record)} className="text-gray-400 hover:text-emerald-400 p-2 rounded-full transition-colors"><EditIcon className="h-5 w-5" /></button>
-                    <button onClick={() => onDelete(record.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-full transition-colors"><DeleteIcon className="h-5 w-5" /></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-700/50">
+                    <tr>
+                        {isSelectionMode && (
+                             <th scope="col" className="p-4">
+                                <input
+                                type="checkbox"
+                                ref={selectAllRef}
+                                onChange={handleSelectAll}
+                                className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-emerald-600 focus:ring-emerald-500"
+                                />
+                            </th>
+                        )}
+                        {schema.map(column => (
+                            <th key={column.id} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer" onClick={() => handleSort(column.id)}>
+                                <div className="flex items-center">
+                                    {column.name}
+                                    {sortConfig?.key === column.id ? (
+                                        sortConfig.direction === 'ascending' ? <SortAscIcon className="h-4 w-4 ml-2" /> : <SortDescIcon className="h-4 w-4 ml-2" />
+                                    ) : null}
+                                </div>
+                            </th>
+                        ))}
+                         <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody className="bg-gray-800 divide-y divide-gray-700">
+                    {displayedRecords.map(record => (
+                        <tr key={record.id} className={selectedRecordIds.includes(record.id) ? 'bg-emerald-900/30' : 'hover:bg-gray-700/40'}>
+                             {isSelectionMode && (
+                                <td className="p-4">
+                                    <input
+                                    type="checkbox"
+                                    checked={selectedRecordIds.includes(record.id)}
+                                    onChange={() => handleSelectRow(record.id)}
+                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                </td>
+                            )}
+                            {schema.map(column => (
+                                <td key={column.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                    {renderCell(record, column)}
+                                </td>
+                            ))}
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button onClick={() => handleEdit(record)} className="p-1 text-gray-400 hover:text-emerald-400"><EditIcon className="h-5 w-5" /></button>
+                                <button onClick={() => onDelete(record.id)} className="p-1 text-gray-400 hover:text-red-400 ml-2"><DeleteIcon className="h-5 w-5" /></button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
           ) : (
-             <div className="text-center py-16">
-                <p className="text-gray-400">{searchQuery ? 'No records match your search.' : 'No records found.'}</p>
-                <Button onClick={handleAddNew} className="mt-4">
-                    <PlusIcon className="h-5 w-5 mr-2" /> Add your first record
-                </Button>
-             </div>
+            <div className="text-center py-16 text-gray-400">
+                <p className="font-semibold">No records found.</p>
+                <p className="text-sm mt-1">{searchQuery ? 'Try adjusting your search query.' : 'Click "Add New" to get started.'}</p>
+            </div>
           )}
         </div>
 
-        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingRecord ? 'Edit Record' : 'Add New Record'}>
-            <RecordForm
-            schema={schema}
-            initialData={editingRecord}
-            onSave={handleSaveRecord}
-            onCancel={() => setIsModalOpen(false)}
+        {isModalOpen && (
+            <RecordFormModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onSave={handleSaveRecord}
+                schema={schema}
+                initialData={editingRecord}
             />
-        </Modal>
+        )}
     </>
     );
+};
+
+interface RecordFormModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (record: Omit<Record, 'id'>) => void;
+  schema: DatabaseSchema;
+  initialData: Record | null;
 }
 
+const RecordFormModal: React.FC<RecordFormModalProps> = ({ isOpen, onClose, onSave, schema, initialData }) => {
+  const [formData, setFormData] = useState<Omit<Record, 'id'>>({});
 
-interface RecordFormProps {
-    schema: DatabaseSchema;
-    initialData: Record | null;
-    onSave: (data: Omit<Record, 'id'>) => void;
-    onCancel: () => void;
-}
+  useEffect(() => {
+    if (isOpen) {
+        const initialFormState: Omit<Record, 'id'> = {};
+        schema.forEach(col => {
+            if (initialData && initialData[col.id] !== undefined) {
+                 if (col.type === 'date' && initialData[col.id]) {
+                    try {
+                        const d = new Date(initialData[col.id]);
+                        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                        initialFormState[col.id] = d.toISOString().split('T')[0];
+                    } catch (e) {
+                         initialFormState[col.id] = '';
+                    }
+                } else {
+                    initialFormState[col.id] = initialData[col.id];
+                }
+            } else {
+                initialFormState[col.id] = col.type === 'boolean' ? false : col.type === 'number' ? null : '';
+            }
+        });
+        setFormData(initialFormState);
+    }
+  }, [initialData, schema, isOpen]);
 
-const RecordForm: React.FC<RecordFormProps> = ({ schema, initialData, onSave, onCancel }) => {
-    const [formData, setFormData] = useState<Omit<Record, 'id'>>({});
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    
+    let processedValue: any = value;
+    if (type === 'checkbox') {
+        processedValue = (e.target as HTMLInputElement).checked;
+    } else if (schema.find(col => col.id === name)?.type === 'number') {
+        processedValue = value === '' ? null : Number(value);
+    }
 
-    useEffect(() => {
-        const defaultState = schema.reduce((acc, col) => {
-            acc[col.id] = initialData?.[col.id] ?? (col.type === 'boolean' ? false : '');
-            return acc;
-        }, {} as Omit<Record, 'id'>);
-        setFormData(defaultState);
-    }, [schema, initialData]);
+    setFormData(prev => ({ ...prev, [name]: processedValue }));
+  };
 
-    const handleChange = (id: string, value: any, type: string) => {
-        if (type === 'boolean') {
-             setFormData(prev => ({ ...prev, [id]: (value as HTMLInputElement).checked }));
-        } else {
-             setFormData(prev => ({ ...prev, [id]: value }));
-        }
-    };
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        onSave(formData);
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            {schema.map(col => (
-                <div key={col.id}>
-                    <label htmlFor={col.id} className="block text-sm font-medium text-gray-300 mb-1">{col.name}</label>
-                    {col.type === 'boolean' ? (
-                        <input
-                            id={col.id}
-                            type="checkbox"
-                            checked={!!formData[col.id]}
-                            onChange={(e) => handleChange(col.id, e.target, col.type)}
-                            className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-emerald-600 focus:ring-emerald-500"
-                        />
-                    ) : (
-                        <Input
-                            id={col.id}
-                            type={col.type === 'date' ? 'date' : col.type === 'number' ? 'number' : 'text'}
-                            value={formData[col.id] || ''}
-                            onChange={(e) => handleChange(col.id, e.target.value, col.type)}
-                            required
-                        />
-                    )}
-                </div>
-            ))}
-            <div className="flex justify-end space-x-3 pt-4">
-                <Button onClick={onCancel} variant="secondary">Cancel</Button>
-                <Button type="submit">Save</Button>
+  const renderInput = (column: ColumnDefinition) => {
+    const value = formData[column.id] ?? '';
+    switch(column.type) {
+      case 'text':
+        return <Input id={column.id} name={column.id} type="text" value={value} onChange={handleChange} autoComplete="off"/>;
+      case 'number':
+        return <Input id={column.id} name={column.id} type="number" value={value === null ? '' : value} onChange={handleChange} />;
+      case 'date':
+        return <Input id={column.id} name={column.id} type="date" value={value} onChange={handleChange} />;
+      case 'boolean':
+        return (
+            <div className="flex items-center h-12">
+                <input
+                    id={column.id}
+                    name={column.id}
+                    type="checkbox"
+                    checked={!!value}
+                    onChange={handleChange}
+                    className="h-5 w-5 rounded border-gray-600 bg-gray-900 text-emerald-600 focus:ring-emerald-500"
+                />
             </div>
-        </form>
-    );
+        )
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Edit Record' : 'Add New Record'}>
+      <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        {schema.map(column => (
+          <div key={column.id}>
+            <label htmlFor={column.id} className="block text-sm font-medium text-gray-300 mb-2">
+              {column.name}
+            </label>
+            {renderInput(column)}
+          </div>
+        ))}
+        <div className="pt-4 flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit">Save</Button>
+        </div>
+      </form>
+    </Modal>
+  );
 };
 
 export default DashboardScreen;

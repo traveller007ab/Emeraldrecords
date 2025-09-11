@@ -24,6 +24,12 @@ export interface ChartConfig {
   categoryColumnId: string;
 }
 
+export interface KanbanConfig {
+  statusColumnId: string;
+  cardTitleColumnId: string;
+  cardDetailColumnIds: string[];
+}
+
 export interface ChatMessage {
     role: 'user' | 'model';
     content: string;

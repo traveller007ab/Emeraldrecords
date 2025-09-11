@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { DatabaseSchema, Record, ChartConfig, ChatMessage } from '../types';
+import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig } from '../types';
 
 // This function will be deployed as a serverless function (e.g., on Vercel or Netlify).
 // It reads the API key from environment variables on the server, keeping it secure.
@@ -63,6 +63,21 @@ const chartConfigResponseSchema = {
     required: ["chartType", "title", "categoryColumnId"]
 };
 
+const kanbanConfigResponseSchema = {
+    type: Type.OBJECT,
+    properties: {
+        statusColumnId: { type: Type.STRING, description: "The 'id' of the 'text' column that best represents the status or stage of a record (e.g., 'status', 'progress')." },
+        cardTitleColumnId: { type: Type.STRING, description: "The 'id' of the column that should be the main title of the Kanban card. This is usually the primary descriptive field." },
+        cardDetailColumnIds: {
+            type: Type.ARRAY,
+            description: "An array of 1 to 2 column 'id's that provide useful secondary details for the card.",
+            items: { type: Type.STRING }
+        }
+    },
+    required: ["statusColumnId", "cardTitleColumnId", "cardDetailColumnIds"]
+};
+
+
 // --- Handler for incoming requests from the frontend ---
 
 export const POST = async (req: Request) => {
@@ -74,6 +89,8 @@ export const POST = async (req: Request) => {
         return handleGenerateSchema(payload);
       case 'generateChart':
         return handleGenerateChart(payload);
+      case 'generateKanban':
+        return handleGenerateKanban(payload);
       case 'chat':
         return handleChat(payload);
       default:
@@ -161,6 +178,45 @@ async function handleGenerateChart({ schema, records }: { schema: DatabaseSchema
     const result = JSON.parse(response.text);
     return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
 }
+
+async function handleGenerateKanban({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
+    const textColumns = schema.filter(col => col.type === 'text');
+    const recordsSample = records.slice(0, 5).map(rec => {
+        const sampleRec: {[key: string]: any} = {};
+        textColumns.forEach(col => {
+            sampleRec[col.id] = rec[col.id];
+        });
+        return sampleRec;
+    });
+
+    const prompt = `
+      You are a UI configuration expert. Your task is to analyze a database schema and sample records to determine the best configuration for a Kanban board.
+
+      Database Schema: ${JSON.stringify(schema)}
+      Sample Records (text fields only): ${JSON.stringify(recordsSample)}
+
+      Instructions:
+      1.  **statusColumnId**: Identify the single 'text' column that best represents a workflow status (e.g., 'status', 'progress', 'stage'). This column should have a limited number of repeating values (e.g., "To Do", "In Progress", "Done").
+      2.  **cardTitleColumnId**: Identify the single column that serves as the best title for a Kanban card. This is typically the primary identifier of the record, like a name, title, or task description.
+      3.  **cardDetailColumnIds**: Select 1 or 2 other columns that provide useful, concise context on the card. Good candidates are dates, assignees, or priority levels. Do not select the status or title column again.
+
+      Your response must be a single JSON object matching the required schema.
+    `;
+
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: kanbanConfigResponseSchema,
+            temperature: 0.2,
+        },
+    });
+
+    const result = JSON.parse(response.text);
+    return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+}
+
 
 async function handleChat({ schema, records, chatHistory }: { schema: DatabaseSchema, records: Record[], chatHistory: ChatMessage[] }) {
     const latestMessage = chatHistory[chatHistory.length - 1].content;
