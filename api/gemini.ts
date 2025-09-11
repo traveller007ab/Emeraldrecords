@@ -2,10 +2,11 @@ import { GoogleGenAI, Type } from "@google/genai";
 import type { Handler } from '@netlify/functions';
 import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig } from '../types';
 
-// The user-provided API key is now hardcoded here.
-const apiKey = "AIzaSyDfkQogjsCorTztjR9FpbBVh5S-Fd_OSok";
+// Securely read the API key from environment variables on the server.
+const apiKey = process.env.API_KEY;
 if (!apiKey) {
-  throw new Error("API_KEY is not set");
+  // This error will be visible in the Netlify function logs if the key is not set.
+  throw new Error("API_KEY environment variable not set");
 }
 
 const ai = new GoogleGenAI({ apiKey });
