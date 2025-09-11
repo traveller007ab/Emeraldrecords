@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { DatabaseSchema, Record, ColumnDefinition } from '../types';
 import Button from './common/Button';
 import Modal from './common/Modal';
@@ -8,6 +8,9 @@ import EditIcon from './icons/EditIcon';
 import DeleteIcon from './icons/DeleteIcon';
 import SortAscIcon from './icons/SortAscIcon';
 import SortDescIcon from './icons/SortDescIcon';
+import SearchIcon from './icons/SearchIcon';
+import CloseIcon from './icons/CloseIcon';
+import ExportIcon from './icons/ExportIcon';
 
 interface TableViewProps {
   schema: DatabaseSchema;
@@ -22,6 +25,7 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
     const [editingRecord, setEditingRecord] = useState<Partial<Record> | null>(null);
     const [sortColumn, setSortColumn] = useState<string>('created_at');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const handleSort = (columnId: string) => {
         if (sortColumn === columnId) {
@@ -32,17 +36,30 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
         }
     };
 
-    const sortedRecords = [...records].sort((a, b) => {
-        const aVal = a[sortColumn];
-        const bVal = b[sortColumn];
+    const sortedRecords = useMemo(() => {
+        return [...records].sort((a, b) => {
+            const aVal = a[sortColumn];
+            const bVal = b[sortColumn];
 
-        if (aVal === null || aVal === undefined) return 1;
-        if (bVal === null || bVal === undefined) return -1;
+            if (aVal === null || aVal === undefined) return 1;
+            if (bVal === null || bVal === undefined) return -1;
 
-        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-        return 0;
-    });
+            if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [records, sortColumn, sortDirection]);
+
+    const filteredRecords = useMemo(() => {
+        if (!searchTerm) {
+            return sortedRecords;
+        }
+        return sortedRecords.filter(record => {
+            return Object.values(record).some(value =>
+                String(value).toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        });
+    }, [sortedRecords, searchTerm]);
 
     const openCreateModal = () => {
         setEditingRecord({});
@@ -73,24 +90,26 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
         closeModal();
     };
 
-    const renderCell = (record: Record, column: ColumnDefinition) => {
+    const renderCell = (record: Record, column: ColumnDefinition): string => {
         const value = record[column.id];
 
+        if (value === null || value === undefined) {
+            return 'N/A';
+        }
         if (column.type === 'boolean') {
-          return value ? <span className="text-emerald-400">Yes</span> : <span className="text-slate-500">No</span>;
+          return value ? 'Yes' : 'No';
         }
         if (column.type === 'date') {
-            if (!value) return <span className="text-slate-500">N/A</span>;
+            if (!value) return 'N/A';
             try {
-                // Adjust for timezone offset before displaying
                 const date = new Date(value);
                 const userTimezoneOffset = date.getTimezoneOffset() * 60000;
                 return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString();
             } catch {
-                return <span className="text-red-400">Invalid Date</span>;
+                return 'Invalid Date';
             }
         }
-        return value?.toString() || <span className="text-slate-500">N/A</span>;
+        return value.toString();
     }
     
     const renderFormField = (column: ColumnDefinition) => {
@@ -149,12 +168,67 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
         )
     }
 
+    const handleExportCsv = () => {
+        if (filteredRecords.length === 0) return;
+
+        const headers = schema.map(col => col.name).join(',');
+        
+        const rows = filteredRecords.map(record => {
+            return schema.map(col => {
+                let cellData = renderCell(record, col);
+                // Escape commas and quotes
+                if (cellData.includes('"')) {
+                    cellData = cellData.replace(/"/g, '""');
+                }
+                if (cellData.includes(',')) {
+                    cellData = `"${cellData}"`;
+                }
+                return cellData;
+            }).join(',');
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `export_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div>
-            <div className="flex justify-end mb-4">
-                <Button onClick={openCreateModal} size="sm">
-                    <PlusIcon className="h-4 w-4 mr-2"/> Add Record
-                </Button>
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                <div className="relative w-full sm:max-w-xs">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <SearchIcon className="w-5 h-5 text-slate-400" />
+                    </div>
+                    <Input
+                        type="text"
+                        placeholder="Search records..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 !py-2"
+                    />
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute inset-y-0 right-0 flex items-center pr-3"
+                            aria-label="Clear search"
+                        >
+                            <CloseIcon className="w-5 h-5 text-slate-400 hover:text-white" />
+                        </button>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button onClick={handleExportCsv} size="sm" variant="secondary" disabled={filteredRecords.length === 0}>
+                        <ExportIcon className="h-4 w-4 mr-2"/> Export CSV
+                    </Button>
+                    <Button onClick={openCreateModal} size="sm">
+                        <PlusIcon className="h-4 w-4 mr-2"/> Add Record
+                    </Button>
+                </div>
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-slate-300">
@@ -162,7 +236,7 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
                         <tr>
                              {schema.map(col => (
                                 <th key={col.id} scope="col" className="px-6 py-3">
-                                    <button onClick={() => handleSort(col.id)} className="flex items-center gap-2 group">
+                                    <button onClick={() => handleSort(col.id)} className="flex items-center gap-2 group whitespace-nowrap">
                                         {col.name}
                                         {sortColumn === col.id ? (
                                             sortDirection === 'asc' ? <SortAscIcon className="w-3 h-3"/> : <SortDescIcon className="w-3 h-3"/>
@@ -176,21 +250,39 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onUpdateRecord, 
                         </tr>
                     </thead>
                     <tbody>
-                        {sortedRecords.map(record => (
+                        {filteredRecords.map(record => (
                             <tr key={record.id} className="border-b border-slate-700 hover:bg-slate-700/30">
-                                {schema.map(col => (
-                                    <td key={`${record.id}-${col.id}`} className="px-6 py-4">{renderCell(record, col)}</td>
-                                ))}
-                                <td className="px-6 py-4 text-right">
-                                    <button onClick={() => openEditModal(record)} className="p-1 text-slate-400 hover:text-white mr-2"><EditIcon className="w-4 h-4" /></button>
-                                    <button onClick={() => onDeleteRecord(record.id)} className="p-1 text-slate-400 hover:text-red-400"><DeleteIcon className="w-4 h-4" /></button>
+                                {schema.map(col => {
+                                    const cellValue = renderCell(record, col);
+                                    return (
+                                        <td key={`${record.id}-${col.id}`} className="px-6 py-4">
+                                            {col.type === 'boolean' ? (
+                                                cellValue === 'Yes' ? <span className="text-emerald-400">{cellValue}</span> : <span className="text-slate-500">{cellValue}</span>
+                                            ) : cellValue === 'N/A' ? (
+                                                <span className="text-slate-500">{cellValue}</span>
+                                            ) : cellValue === 'Invalid Date' ? (
+                                                <span className="text-red-400">{cellValue}</span>
+                                            ) : (
+                                                cellValue
+                                            )}
+                                        </td>
+                                    )
+                                })}
+                                <td className="px-6 py-4 text-right whitespace-nowrap">
+                                    <button onClick={() => openEditModal(record)} className="p-1 text-slate-400 hover:text-white mr-2" aria-label={`Edit record ${record.id}`}><EditIcon className="w-4 h-4" /></button>
+                                    <button onClick={() => onDeleteRecord(record.id)} className="p-1 text-slate-400 hover:text-red-400" aria-label={`Delete record ${record.id}`}><DeleteIcon className="w-4 h-4" /></button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
-                 {records.length === 0 && (
-                    <p className="text-center py-8 text-slate-500">No records found. Click "Add Record" to get started.</p>
+                 {filteredRecords.length === 0 && (
+                    <p className="text-center py-8 text-slate-500">
+                        {searchTerm 
+                            ? `No records match your search for "${searchTerm}".`
+                            : 'No records found. Click "Add Record" to get started.'
+                        }
+                    </p>
                 )}
             </div>
 
