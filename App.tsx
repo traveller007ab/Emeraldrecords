@@ -135,14 +135,14 @@ const App: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-gray-900">
+      <div className="min-h-screen w-full flex items-center justify-center">
         <LogoIcon className="h-16 w-16 animate-pulse text-emerald-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen">
       {!isLoggedIn ? (
         <LoginScreen onLogin={handleLogin} />
       ) : !schema ? (

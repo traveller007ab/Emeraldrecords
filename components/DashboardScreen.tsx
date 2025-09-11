@@ -72,13 +72,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
 
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8">
       <header className="flex flex-wrap justify-between items-center mb-8 gap-4">
         <div className="flex items-center space-x-3">
           <LogoIcon className="h-10 w-10 text-emerald-500" />
           <div>
             <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-            {surveyData && <p className="text-sm text-gray-400 capitalize">{surveyData.occupation}: {surveyData.dataType}</p>}
+            {surveyData && <p className="text-sm text-slate-400 capitalize">{surveyData.occupation}: {surveyData.dataType}</p>}
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -91,54 +91,62 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
         </div>
       </header>
 
-       <div className="bg-gray-800 rounded-2xl shadow-lg p-6">
-        <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
-            <h2 className="text-xl font-semibold capitalize">
-                {view === 'table' ? 'My Records' : view}
-            </h2>
-            <div className="flex items-center rounded-lg bg-gray-900 p-1">
-                <button 
-                    onClick={() => setView('table')} 
-                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${view === 'table' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                >
-                    <TableIcon className="h-5 w-5" />
-                </button>
-                 <button 
-                    onClick={() => setView('analytics')} 
-                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${view === 'analytics' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                >
-                    <AnalyticsIcon className="h-5 w-5" />
-                </button>
-                <button 
-                    onClick={() => setView('kanban')} 
-                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${view === 'kanban' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-                >
-                    <KanbanIcon className="h-5 w-5" />
-                </button>
+       <div className="relative bg-slate-800/50 rounded-2xl shadow-lg p-6 group">
+            {/* <!--- Glowing Border Effect ---> */}
+            <div className="absolute -inset-px bg-gradient-to-r from-emerald-600 to-sky-600 rounded-2xl opacity-0 group-hover:opacity-70 transition-opacity duration-500"></div>
+             <div className="absolute inset-0 rounded-2xl overflow-hidden">
+                <div className="absolute inset-0 bg-[conic-gradient(from_90deg_at_50%_50%,#059669_0%,#0284c7_50%,#059669_100%)] opacity-20 animate-spin-slow"></div>
             </div>
-        </div>
 
-        {view === 'table' && (
-            <TableView 
-                schema={schema}
-                records={records}
-                onSave={handleSaveRecord}
-                onDelete={handleDelete}
-                onBulkDelete={handleBulkDelete}
-                surveyDataType={surveyData?.dataType || 'data'}
-                onOpenChat={() => setIsChatOpen(true)}
-            />
-        )}
-        {view === 'analytics' && (
-            <AnalyticsView schema={schema} records={records} />
-        )}
-        {view === 'kanban' && (
-            <KanbanView 
-                schema={schema} 
-                records={records} 
-                onUpdateRecord={handleUpdateRecord} 
-            />
-        )}
+            <div className="relative z-10">
+                <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+                    <h2 className="text-xl font-semibold capitalize text-white">
+                        {view === 'table' ? 'My Records' : view}
+                    </h2>
+                    <div className="flex items-center rounded-lg bg-slate-900/50 p-1">
+                        <button 
+                            onClick={() => setView('table')} 
+                            className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${view === 'table' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700'}`}
+                        >
+                            <TableIcon className="h-5 w-5" />
+                        </button>
+                         <button 
+                            onClick={() => setView('analytics')} 
+                            className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${view === 'analytics' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700'}`}
+                        >
+                            <AnalyticsIcon className="h-5 w-5" />
+                        </button>
+                        <button 
+                            onClick={() => setView('kanban')} 
+                            className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${view === 'kanban' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-700'}`}
+                        >
+                            <KanbanIcon className="h-5 w-5" />
+                        </button>
+                    </div>
+                </div>
+
+                {view === 'table' && (
+                    <TableView 
+                        schema={schema}
+                        records={records}
+                        onSave={handleSaveRecord}
+                        onDelete={handleDelete}
+                        onBulkDelete={handleBulkDelete}
+                        surveyDataType={surveyData?.dataType || 'data'}
+                        onOpenChat={() => setIsChatOpen(true)}
+                    />
+                )}
+                {view === 'analytics' && (
+                    <AnalyticsView schema={schema} records={records} />
+                )}
+                {view === 'kanban' && (
+                    <KanbanView 
+                        schema={schema} 
+                        records={records} 
+                        onUpdateRecord={handleUpdateRecord} 
+                    />
+                )}
+            </div>
        </div>
        {isChatOpen && (
         <AiChatAssistant
@@ -271,7 +279,7 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
   const renderCell = (record: Record, column: ColumnDefinition) => {
     const value = record[column.id];
     if (column.type === 'boolean') {
-      return value ? <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">Yes</span> : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">No</span>;
+      return value ? <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100/10 text-emerald-300">Yes</span> : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100/10 text-slate-300">No</span>;
     }
     if (column.type === 'date') {
         if (!value) {
@@ -356,13 +364,13 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
     <>
         <div className="flex flex-wrap justify-between items-center mb-4 gap-4">
             {selectedRecordIds.length > 0 ? (
-                <div className="w-full flex justify-between items-center bg-gray-700/50 p-2 rounded-lg">
+                <div className="w-full flex justify-between items-center bg-slate-700/50 p-2 rounded-lg">
                     <span className="text-sm font-semibold pl-2">{selectedRecordIds.length} selected</span>
                     <div className="flex items-center gap-2">
                         <Button onClick={handleExportSelected} variant="secondary" size="sm">
                             <ExportIcon className="h-4 w-4 mr-2" /> Export Selected
                         </Button>
-                        <Button onClick={handleDeleteSelected} variant="secondary" size="sm" className="!bg-red-800 hover:!bg-red-700">
+                        <Button onClick={handleDeleteSelected} variant="secondary" size="sm" className="!bg-red-800/80 hover:!bg-red-700/80 border-red-700 hover:border-red-600">
                              <DeleteIcon className="h-4 w-4 mr-2" /> Delete Selected
                         </Button>
                          <Button onClick={handleToggleSelectionMode} variant="secondary" size="sm">Cancel</Button>
@@ -371,10 +379,10 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
             ) : (
                 <>
                     <div className="flex items-center gap-4">
-                        <span className="text-sm text-gray-400 font-medium">
+                        <span className="text-sm text-slate-400 font-medium">
                             {displayedRecords.length} {displayedRecords.length === 1 ? 'record' : 'records'}
                         </span>
-                        <div className="h-4 w-px bg-gray-600" />
+                        <div className="h-4 w-px bg-slate-600" />
                         <Button onClick={handleToggleSelectionMode} variant="secondary" size="sm">
                            <CheckSquareIcon className="h-4 w-4 mr-2" />
                            {isSelectionMode ? 'Cancel' : 'Select'}
@@ -394,7 +402,7 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-10 !py-2"
                             />
-                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                         </div>
                         <Button onClick={onOpenChat} variant="secondary">
                             <SparklesIcon className="h-5 w-5 mr-2" /> Ask AI
@@ -410,8 +418,8 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
         <div className="overflow-x-auto">
 {/* This is the beginning of the fix for the truncated file content */}
           {displayedRecords.length > 0 ? (
-            <table className="min-w-full divide-y divide-gray-700">
-                <thead className="bg-gray-700/50">
+            <table className="min-w-full divide-y divide-slate-700">
+                <thead>
                     <tr>
                         {isSelectionMode && (
                              <th scope="col" className="p-4">
@@ -419,12 +427,12 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
                                 type="checkbox"
                                 ref={selectAllRef}
                                 onChange={handleSelectAll}
-                                className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-emerald-600 focus:ring-emerald-500"
+                                className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
                                 />
                             </th>
                         )}
                         {schema.map(column => (
-                            <th key={column.id} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer" onClick={() => handleSort(column.id)}>
+                            <th key={column.id} scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider cursor-pointer" onClick={() => handleSort(column.id)}>
                                 <div className="flex items-center">
                                     {column.name}
                                     {sortConfig?.key === column.id ? (
@@ -436,34 +444,34 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
                          <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
                     </tr>
                 </thead>
-                <tbody className="bg-gray-800 divide-y divide-gray-700">
+                <tbody className="divide-y divide-slate-800">
                     {displayedRecords.map(record => (
-                        <tr key={record.id} className={selectedRecordIds.includes(record.id) ? 'bg-emerald-900/30' : 'hover:bg-gray-700/40'}>
+                        <tr key={record.id} className={selectedRecordIds.includes(record.id) ? 'bg-emerald-900/30' : 'hover:bg-slate-700/40'}>
                              {isSelectionMode && (
                                 <td className="p-4">
                                     <input
                                     type="checkbox"
                                     checked={selectedRecordIds.includes(record.id)}
                                     onChange={() => handleSelectRow(record.id)}
-                                    className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-emerald-600 focus:ring-emerald-500"
+                                    className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-600 focus:ring-emerald-500"
                                     />
                                 </td>
                             )}
                             {schema.map(column => (
-                                <td key={column.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                <td key={column.id} className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                                     {renderCell(record, column)}
                                 </td>
                             ))}
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button onClick={() => handleEdit(record)} className="p-1 text-gray-400 hover:text-emerald-400"><EditIcon className="h-5 w-5" /></button>
-                                <button onClick={() => onDelete(record.id)} className="p-1 text-gray-400 hover:text-red-400 ml-2"><DeleteIcon className="h-5 w-5" /></button>
+                                <button onClick={() => handleEdit(record)} className="p-1 text-slate-400 hover:text-emerald-400"><EditIcon className="h-5 w-5" /></button>
+                                <button onClick={() => onDelete(record.id)} className="p-1 text-slate-400 hover:text-red-400 ml-2"><DeleteIcon className="h-5 w-5" /></button>
                             </td>
                         </tr>
                     ))}
                 </tbody>
             </table>
           ) : (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16 text-slate-400">
                 <p className="font-semibold">No records found.</p>
                 <p className="text-sm mt-1">{searchQuery ? 'Try adjusting your search query.' : 'Click "Add New" to get started.'}</p>
             </div>
@@ -554,7 +562,7 @@ const RecordFormModal: React.FC<RecordFormModalProps> = ({ isOpen, onClose, onSa
                     type="checkbox"
                     checked={!!value}
                     onChange={handleChange}
-                    className="h-5 w-5 rounded border-gray-600 bg-gray-900 text-emerald-600 focus:ring-emerald-500"
+                    className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-emerald-600 focus:ring-emerald-500"
                 />
             </div>
         )
@@ -568,7 +576,7 @@ const RecordFormModal: React.FC<RecordFormModalProps> = ({ isOpen, onClose, onSa
       <form onSubmit={handleSubmit} className="space-y-4 mt-4">
         {schema.map(column => (
           <div key={column.id}>
-            <label htmlFor={column.id} className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor={column.id} className="block text-sm font-medium text-slate-300 mb-2">
               {column.name}
             </label>
             {renderInput(column)}

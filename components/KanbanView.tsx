@@ -113,7 +113,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
     };
 
     if (records.length === 0) {
-        return <div className="text-center py-16 text-gray-400">Add some records to see your Kanban board.</div>;
+        return <div className="text-center py-16 text-slate-400">Add some records to see your Kanban board.</div>;
     }
 
     if (isLoading) {
@@ -130,7 +130,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
     }
 
     if (!kanbanConfig || !boardData) {
-        return <div className="text-center py-16 text-gray-400">Could not display Kanban board.</div>;
+        return <div className="text-center py-16 text-slate-400">Could not display Kanban board.</div>;
     }
 
     const titleColumn = schema.find(c => c.id === kanbanConfig.cardTitleColumnId);
@@ -141,14 +141,14 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
             {boardData.orderedStatuses.map(status => (
                 <div 
                     key={status}
-                    className="flex-shrink-0 w-80 bg-gray-900 rounded-xl"
+                    className="flex-shrink-0 w-80 bg-slate-900/50 rounded-xl"
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, status)}
                 >
-                    <div className="p-4 border-b border-gray-700 sticky top-0 bg-gray-900 rounded-t-xl z-10">
+                    <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900/50 backdrop-blur-sm rounded-t-xl z-10">
                         <h3 className="font-semibold text-white capitalize flex items-center gap-2">
                             {status}
-                            <span className="text-sm font-normal bg-gray-700 text-gray-300 rounded-full px-2 py-0.5">
+                            <span className="text-sm font-normal bg-slate-700 text-slate-300 rounded-full px-2 py-0.5">
                                 {boardData.columns[status]?.length || 0}
                             </span>
                         </h3>
@@ -159,16 +159,16 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
                                 key={record.id}
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, record.id)}
-                                className={`bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700 cursor-grab active:cursor-grabbing transition-opacity ${draggedRecordId === record.id ? 'opacity-50' : ''}`}
+                                className={`bg-slate-800 p-4 rounded-lg shadow-md border border-slate-700 cursor-grab active:cursor-grabbing transition-opacity ${draggedRecordId === record.id ? 'opacity-50' : ''}`}
                             >
-                                <h4 className="font-bold text-gray-100 mb-2">{renderCell(record, titleColumn)}</h4>
+                                <h4 className="font-bold text-slate-100 mb-2">{renderCell(record, titleColumn)}</h4>
                                 <div className="space-y-1">
                                     {detailColumns.map(col => {
                                         const value = renderCell(record, col);
                                         if (!value) return null;
                                         return (
-                                            <div key={col.id} className="text-xs text-gray-400">
-                                                <span className="font-semibold text-gray-500">{col.name}: </span>{value}
+                                            <div key={col.id} className="text-xs text-slate-400">
+                                                <span className="font-semibold text-slate-500">{col.name}: </span>{value}
                                             </div>
                                         )
                                     })}
@@ -176,7 +176,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
                             </div>
                         ))}
                          {(!boardData.columns[status] || boardData.columns[status].length === 0) && (
-                            <div className="h-full border-2 border-dashed border-gray-700 rounded-lg"></div>
+                            <div className="h-full border-2 border-dashed border-slate-700 rounded-lg"></div>
                         )}
                     </div>
                 </div>

@@ -76,13 +76,13 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
   };
 
   return (
-    <div className="fixed bottom-4 right-4 w-[90vw] max-w-md h-[70vh] max-h-[600px] bg-gray-800 rounded-2xl shadow-2xl flex flex-col z-50 border border-emerald-500/30">
-      <header className="flex items-center justify-between p-4 border-b border-gray-700">
+    <div className="fixed bottom-4 right-4 w-[90vw] max-w-md h-[70vh] max-h-[600px] bg-slate-800/80 backdrop-blur-md rounded-2xl shadow-2xl flex flex-col z-50 border border-emerald-500/30">
+      <header className="flex items-center justify-between p-4 border-b border-slate-700">
         <div className="flex items-center gap-3">
             <SparklesIcon className="h-6 w-6 text-emerald-400" />
             <h3 className="font-semibold text-white">AI Assistant</h3>
         </div>
-        <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white transition-colors">
+        <button onClick={onClose} className="p-1 rounded-full text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
           <CloseIcon className="h-6 w-6" />
         </button>
       </header>
@@ -91,7 +91,7 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
         {messages.map((msg, index) => (
           <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
             {msg.role === 'model' && <LogoIcon className="h-8 w-8 text-emerald-500 flex-shrink-0 mt-1" />}
-            <div className={`max-w-[80%] p-3 rounded-lg ${msg.role === 'user' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
+            <div className={`max-w-[80%] p-3 rounded-lg ${msg.role === 'user' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-200'}`}>
               <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
             </div>
           </div>
@@ -99,7 +99,7 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
          {isLoading && (
             <div className="flex items-start gap-3">
                 <LogoIcon className="h-8 w-8 text-emerald-500 flex-shrink-0 mt-1 animate-pulse" />
-                <div className="max-w-[80%] p-3 rounded-lg bg-gray-700">
+                <div className="max-w-[80%] p-3 rounded-lg bg-slate-700">
                    <div className="flex items-center gap-1.5">
                         <span className="h-2 w-2 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
                         <span className="h-2 w-2 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
@@ -111,7 +111,7 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-gray-700">
+      <div className="p-4 border-t border-slate-700">
         {pendingAction ? (
           <div className="flex justify-center items-center gap-3">
             <Button onClick={handleCancelAction} variant="secondary" className="w-full">
