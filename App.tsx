@@ -5,8 +5,8 @@ import * as apiService from './services/apiService';
 import { setSupabaseCredentials, clearSupabaseCredentials } from './services/supabaseClient';
 import type { System } from './types';
 import LogoIcon from './components/icons/LogoIcon';
-// FIX: Import Button component
 import Button from './components/common/Button';
+import SqlSetupScreen from './components/SqlSetupScreen';
 
 const createDefaultSystem = (): Omit<System, 'id' | 'created_at' | 'updated_at'> => ({
   name: "New System",
@@ -36,21 +36,69 @@ const createDefaultSystem = (): Omit<System, 'id' | 'created_at' | 'updated_at'>
   },
 });
 
+const systemsTableSql = `-- 1. Create the table for your system document
+CREATE TABLE public.systems (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  name text NOT NULL,
+  type text,
+  description text,
+  version integer NOT NULL DEFAULT 1,
+  parent_version integer,
+  components jsonb,
+  logic jsonb,
+  calculations jsonb,
+  diagram jsonb,
+  metadata jsonb,
+  CONSTRAINT systems_pkey PRIMARY KEY (id)
+);
+
+-- 2. Enable Row Level Security (RLS)
+ALTER TABLE public.systems ENABLE ROW LEVEL SECURITY;
+
+-- 3. Create a policy to allow anon users to use the table.
+-- For production apps, you'll want to restrict this to authenticated users.
+CREATE POLICY "Enable access for all anon users"
+ON public.systems
+FOR ALL
+TO anon
+USING (true)
+WITH CHECK (true);
+
+-- 4. Create a trigger to automatically update the 'updated_at' timestamp on change
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER on_systems_updated
+BEFORE UPDATE ON public.systems
+FOR EACH ROW
+EXECUTE FUNCTION public.handle_updated_at();
+`;
+
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [systemDocument, setSystemDocument] = useState<System | null>(null);
+  const [needsSetup, setNeedsSetup] = useState<boolean>(false);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('emerald-isLoggedIn');
     clearSupabaseCredentials();
     setIsLoggedIn(false);
     setSystemDocument(null);
+    setNeedsSetup(false);
   }, []);
 
   const loadSystem = useCallback(async () => {
     setIsLoading(true);
+    setNeedsSetup(false);
     try {
         let doc = await apiService.getSystemDocument();
         if (!doc) {
@@ -58,10 +106,16 @@ const App: React.FC = () => {
             doc = await apiService.createSystemDocument(createDefaultSystem());
         }
         setSystemDocument(doc);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Failed to load or create system document:", error);
-        alert("Could not load your system document. Please check your Supabase connection, permissions, and ensure a 'systems' table exists.");
-        handleLogout();
+        // "42P01" is the PostgreSQL error code for "undefined_table"
+        if (error?.code === '42P01') {
+            console.log("'systems' table not found. Prompting user for setup.");
+            setNeedsSetup(true);
+        } else {
+            alert("Could not load your system document. Please check your Supabase connection and permissions.");
+            handleLogout();
+        }
     } finally {
         setIsLoading(false);
     }
@@ -124,6 +178,11 @@ const App: React.FC = () => {
       }
   }
 
+  const handleCompleteSetup = useCallback(() => {
+    setNeedsSetup(false);
+    loadSystem();
+  }, [loadSystem]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center">
@@ -136,6 +195,12 @@ const App: React.FC = () => {
     <div className="min-h-screen">
       {!isLoggedIn ? (
         <LoginScreen onLogin={handleLogin} />
+      ) : needsSetup ? (
+        <SqlSetupScreen
+          tableName="systems"
+          sqlSchema={systemsTableSql}
+          onConfirm={handleCompleteSetup}
+        />
       ) : systemDocument ? (
         <DashboardScreen
           systemDocument={systemDocument}
