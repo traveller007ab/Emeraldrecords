@@ -1,8 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import type { Handler } from '@netlify/functions';
 import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig } from '../types';
 
-// This function will be deployed as a serverless function (e.g., on Vercel or Netlify).
-// It reads the API key from environment variables on the server, keeping it secure.
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable not set");
 }
@@ -84,10 +83,16 @@ const kanbanConfigResponseSchema = {
 
 
 // --- Handler for incoming requests from the frontend ---
+export const handler: Handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method Not Allowed' };
+  }
 
-export const POST = async (req: Request) => {
   try {
-    const { action, payload } = await req.json();
+    if (!event.body) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Missing request body' }) };
+    }
+    const { action, payload } = JSON.parse(event.body);
 
     switch (action) {
       case 'generateSchema':
@@ -99,11 +104,11 @@ export const POST = async (req: Request) => {
       case 'chat':
         return handleChat(payload);
       default:
-        return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400, headers: { 'Content-Type': 'application/json' }});
+        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid action' })};
     }
   } catch (error) {
     console.error("Error in API route:", error);
-    return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500, headers: { 'Content-Type': 'application/json' }});
+    return { statusCode: 500, body: JSON.stringify({ error: 'Internal Server Error' }) };
   }
 };
 
@@ -150,7 +155,11 @@ async function handleGenerateSchema({ occupation, dataType }: { occupation: stri
       sqlSchema: parsedData.sqlSchema,
   };
 
-  return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(result)
+  };
 }
 
 async function handleGenerateChart({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
@@ -181,7 +190,11 @@ async function handleGenerateChart({ schema, records }: { schema: DatabaseSchema
     });
     
     const result = JSON.parse(response.text);
-    return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+    return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result)
+    };
 }
 
 async function handleGenerateKanban({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
@@ -213,7 +226,11 @@ async function handleGenerateKanban({ schema, records }: { schema: DatabaseSchem
     });
 
     const result = JSON.parse(response.text);
-    return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+    return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result)
+    };
 }
 
 
@@ -264,5 +281,9 @@ async function handleChat({ schema, records, chatHistory }: { schema: DatabaseSc
         },
     });
     
-    return new Response(JSON.stringify({ response: response.text }), { headers: { 'Content-Type': 'application/json' } });
+    return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: response.text })
+    };
 }
