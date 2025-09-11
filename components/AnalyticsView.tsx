@@ -128,11 +128,11 @@ const AnalyticsView: React.FC<AnalyticsViewProps> = ({ schema, records }) => {
                     <h3 className="text-lg font-semibold mb-4 text-white">{chartConfig?.title}</h3>
                     <div className="space-y-2">
                         {chartData.labels.map((label, index) => (
-                            <div key={label} className="flex items-center gap-4">
+                            <div key={label} className="flex items-center gap-4 animate-fade-in" style={{ animationDelay: `${index * 50}ms` }}>
                                 <div className="text-sm text-slate-300 w-1/4 truncate text-right">{label}</div>
                                 <div className="w-3/4 bg-slate-600 rounded-full h-6">
                                     <div 
-                                        className="bg-emerald-500 h-6 rounded-full flex items-center justify-end pr-2 text-white text-xs font-bold"
+                                        className="bg-emerald-500 h-6 rounded-full flex items-center justify-end pr-2 text-white text-xs font-bold transition-all duration-500 ease-out"
                                         style={{ width: chartData.maxCount > 0 ? `${(chartData.data[index] / chartData.maxCount) * 100}%` : '0%'}}
                                     >
                                        {chartData.data[index]}

@@ -273,10 +273,10 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, filters, onFilte
 
     return (
         <div>
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center justify-between mb-4 gap-4">
+                <div className="flex flex-1 items-center gap-2 min-w-[200px]">
                     {/* Search Input */}
-                    <div className="relative w-full sm:max-w-xs">
+                    <div className="relative w-full max-w-xs">
                         <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                             <SearchIcon className="w-5 h-5 text-slate-400" />
                         </div>

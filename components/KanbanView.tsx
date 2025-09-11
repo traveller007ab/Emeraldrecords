@@ -14,6 +14,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [draggedRecordId, setDraggedRecordId] = useState<string | null>(null);
+    const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchKanbanConfig = async () => {
@@ -95,6 +96,11 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
         e.dataTransfer.effectAllowed = 'move';
         setDraggedRecordId(recordId);
     };
+    
+    const handleDragEnd = () => {
+        setDraggedRecordId(null);
+        setDragOverStatus(null);
+    };
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault(); 
@@ -109,7 +115,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
         if (originalRecord && originalRecord[kanbanConfig.statusColumnId] !== newStatus) {
             onUpdateRecord(draggedRecordId, { [kanbanConfig.statusColumnId]: newStatus });
         }
-        setDraggedRecordId(null);
+        handleDragEnd();
     };
 
     if (records.length === 0) {
@@ -141,8 +147,10 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
             {boardData.orderedStatuses.map(status => (
                 <div 
                     key={status}
-                    className="flex-shrink-0 w-80 bg-slate-900/50 rounded-xl"
+                    className={`flex-shrink-0 w-80 bg-slate-900/50 rounded-xl transition-colors ${dragOverStatus === status ? 'bg-emerald-500/10' : ''}`}
                     onDragOver={handleDragOver}
+                    onDragEnter={() => setDragOverStatus(status)}
+                    onDragLeave={() => setDragOverStatus(null)}
                     onDrop={(e) => handleDrop(e, status)}
                 >
                     <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-900/50 backdrop-blur-sm rounded-t-xl z-10">
@@ -159,6 +167,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
                                 key={record.id}
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, record.id)}
+                                onDragEnd={handleDragEnd}
                                 className={`bg-slate-800 p-4 rounded-lg shadow-md border border-slate-700 cursor-grab active:cursor-grabbing transition-opacity ${draggedRecordId === record.id ? 'opacity-50' : ''}`}
                             >
                                 <h4 className="font-bold text-slate-100 mb-2">{renderCell(record, titleColumn)}</h4>
@@ -176,7 +185,9 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
                             </div>
                         ))}
                          {(!boardData.columns[status] || boardData.columns[status].length === 0) && (
-                            <div className="h-full border-2 border-dashed border-slate-700 rounded-lg"></div>
+                            <div className="h-full border-2 border-dashed border-slate-700 rounded-lg flex items-center justify-center">
+                               <p className="text-slate-600 text-sm">Drop here</p>
+                            </div>
                         )}
                     </div>
                 </div>

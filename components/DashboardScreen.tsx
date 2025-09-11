@@ -15,6 +15,8 @@ import Spinner from './common/Spinner';
 import SparklesIcon from './icons/SparklesIcon';
 import CloseIcon from './icons/CloseIcon';
 import ChartModal from './ChartModal';
+import { Menu } from '@headlessui/react';
+import ChevronDownIcon from './icons/ChevronDownIcon';
 
 interface DataWorkspaceProps {
   tables: string[];
@@ -150,13 +152,33 @@ const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
         <div className="flex items-center space-x-3">
           <LogoIcon className="h-10 w-10 text-emerald-500" />
           <div>
-             <select 
-                value={selectedTable}
-                onChange={e => setSelectedTable(e.target.value)}
-                className="text-2xl font-bold text-white bg-transparent focus:outline-none"
-             >
-                {tables.map(table => <option key={table} value={table} className="bg-slate-800 font-bold">{table}</option>)}
-             </select>
+            <Menu as="div" className="relative inline-block text-left">
+              <div>
+                <Menu.Button className="inline-flex w-full justify-center items-center gap-x-1.5 rounded-md bg-transparent text-2xl font-bold text-white focus:outline-none">
+                  {selectedTable}
+                  <ChevronDownIcon className="-mr-1 h-6 w-6 text-slate-400" aria-hidden="true" />
+                </Menu.Button>
+              </div>
+
+              <Menu.Items className="absolute left-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-slate-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                <div className="py-1">
+                  {tables.map(table => (
+                     <Menu.Item key={table}>
+                      {({ active }) => (
+                        <button
+                          onClick={() => setSelectedTable(table)}
+                          className={`${
+                            active ? 'bg-slate-700 text-white' : 'text-slate-300'
+                          } group flex w-full items-center rounded-md px-4 py-2 text-sm`}
+                        >
+                          {table}
+                        </button>
+                      )}
+                    </Menu.Item>
+                  ))}
+                </div>
+              </Menu.Items>
+            </Menu>
             <p className="text-sm text-slate-400 capitalize">Your AI-powered data workspace.</p>
           </div>
         </div>
