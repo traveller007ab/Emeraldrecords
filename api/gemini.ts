@@ -170,9 +170,8 @@ async function handleAiResponse({ systemDocument, chatHistory }: { systemDocumen
         config: {
             systemInstruction,
             temperature: 0.1,
-            // FIX: The 'tools' property should be inside the 'config' object.
-            tools,
         },
+        tools,
     });
     
     let resultBody: { text?: string; toolCall?: any } = {};
