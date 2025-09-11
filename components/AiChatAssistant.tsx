@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { DatabaseSchema, ChatMessage, ToolCallPayload, Record, Filter } from '../types';
+import type { DatabaseSchema, ChatMessage, ToolCallPayload, Record, Filter, ChartData } from '../types';
 import { getAiResponse } from '../services/geminiService';
 import Button from './common/Button';
 import Input from './common/Input';
@@ -17,9 +17,10 @@ interface AiChatAssistantProps {
   onUpdateRecord: (recordId: string, updates: Partial<Omit<Record, 'id'>>) => void;
   onDeleteRecord: (recordId: string) => void;
   onSearch: (filters: Filter[]) => void;
+  onGenerateChart: (chartData: ChartData) => void;
 }
 
-const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, onClose, onCreateRecord, onUpdateRecord, onDeleteRecord, onSearch }) => {
+const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, onClose, onCreateRecord, onUpdateRecord, onDeleteRecord, onSearch, onGenerateChart }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'model', content: `Hello! I can help you manage your "${tableName}" table. \n\nTry asking: 'Find all records where status is complete' or 'Create a new record'.` }
   ]);
@@ -55,6 +56,14 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, on
             }
             if (toolCall.args.filters) {
                 onSearch(toolCall.args.filters);
+            }
+        } else if (toolCall.name === 'generateChart') {
+            const message = toolCall.args?.confirmationMessage;
+            if (typeof message === 'string' && message) {
+                setMessages(prev => [...prev, { role: 'model', content: message }]);
+            }
+            if (toolCall.args.chartData) {
+                onGenerateChart(toolCall.args.chartData);
             }
         } else {
             const message = toolCall.args?.confirmationMessage;
@@ -101,7 +110,7 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, on
               } else { throw new Error("Missing record ID for deletion."); }
               break;
           default:
-              // searchRecords is handled directly, so it won't reach here.
+              // searchRecords & generateChart are handled directly, so they won't reach here.
               console.error(`Unknown tool call name: ${name}`);
               throw new Error("Unknown action requested.");
       }

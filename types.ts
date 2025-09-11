@@ -23,6 +23,13 @@ export interface Filter {
   value: any;
 }
 
+// Chart Types
+export interface ChartData {
+  title: string;
+  type: 'bar';
+  data: Array<{ label: string; value: number }>;
+}
+
 
 // AI Interaction Types
 export interface ChatMessage {
@@ -31,13 +38,14 @@ export interface ChatMessage {
 }
 
 export interface ToolCallPayload {
-  name: 'createRecord' | 'updateRecord' | 'deleteRecord' | 'searchRecords';
+  name: 'createRecord' | 'updateRecord' | 'deleteRecord' | 'searchRecords' | 'generateChart';
   args: {
     record?: Partial<Omit<Record, 'id' | 'created_at'>>;
     recordId?: string;
     filters?: Filter[];
-    confirmationMessage?: string; // Optional for search
-    responseMessage?: string; // For search results
+    confirmationMessage?: string;
+    responseMessage?: string;
+    chartData?: ChartData;
   };
 }
 

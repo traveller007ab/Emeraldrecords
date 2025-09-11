@@ -95,6 +95,36 @@ const buildTools = (schema: DatabaseSchema) => {
                     required: ["recordId", "confirmationMessage"]
                 },
             },
+            {
+                name: "generateChart",
+                description: "Generates and displays a chart to visualize data based on the user's request. Use this when the user asks to 'chart', 'visualize', 'plot', or 'graph' the data (e.g., 'show me a bar chart of tasks by status').",
+                parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                        chartData: {
+                            type: Type.OBJECT,
+                            description: "The data and configuration for the chart.",
+                            properties: {
+                                title: { type: Type.STRING, description: "A descriptive title for the chart (e.g., 'Tasks by Status')." },
+                                type: { type: Type.STRING, description: "The type of chart. Currently only 'bar' is supported." },
+                                data: {
+                                    type: Type.ARRAY,
+                                    description: "The aggregated data points for the chart. The AI should perform the aggregation (e.g., COUNT or SUM) and return the final data points.",
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            label: { type: Type.STRING, description: "The label for a data point (e.g., a status category)." },
+                                            value: { type: Type.NUMBER, description: "The numerical value for that label (e.g., the count of tasks)." }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmationMessage: { type: Type.STRING, description: "A message to the user confirming the chart generation. e.g., 'Sure, here is a bar chart showing tasks by status.'" }
+                    },
+                    required: ["chartData", "confirmationMessage"]
+                },
+            },
         ]
     }];
 };
@@ -135,12 +165,12 @@ async function handleAiResponse({ tableName, schema, chatHistory }: { tableName:
 
     const systemInstruction = `
         You are an AI assistant that helps users manage their data in a table named "${tableName}".
-        The user will describe a change or ask a question, and you will call the appropriate function ('searchRecords', createRecord', 'updateRecord', 'deleteRecord').
+        The user will describe a change or ask a question, and you will call the appropriate function ('searchRecords', createRecord', 'updateRecord', 'deleteRecord', 'generateChart').
 
         **Core Rules:**
         1.  **Tool Use**: You MUST use the provided tools to perform any data search or modification. Do not just respond with text if a tool is appropriate.
         2.  **Confirmation/Response Messages**:
-            *   For actions ('create', 'update', 'delete'), you MUST create a clear, concise **confirmation** message for the user.
+            *   For actions ('create', 'update', 'delete', 'generateChart'), you MUST create a clear, concise **confirmation** message for the user.
             *   For 'searchRecords', you MUST create a **response** message that summarizes the search being performed.
         3.  **Clarification**: If the user's request is ambiguous (e.g., they ask to delete a record without specifying an ID), ask clarifying questions instead of calling a tool.
         4.  **Schema Adherence**: The data you provide in tool calls MUST match the schema.

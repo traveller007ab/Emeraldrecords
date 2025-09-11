@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { DatabaseSchema, Record, Filter } from '../types';
+import type { DatabaseSchema, Record, Filter, ChartData } from '../types';
 import Button from './common/Button';
 import AiChatAssistant from './AiChatAssistant';
 import LogoIcon from './icons/LogoIcon';
@@ -14,6 +14,7 @@ import * as apiService from '../services/apiService';
 import Spinner from './common/Spinner';
 import SparklesIcon from './icons/SparklesIcon';
 import CloseIcon from './icons/CloseIcon';
+import ChartModal from './ChartModal';
 
 interface DataWorkspaceProps {
   tables: string[];
@@ -43,6 +44,7 @@ const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filter[]>([]);
+  const [chartModalData, setChartModalData] = useState<ChartData | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!selectedTable) return;
@@ -196,6 +198,14 @@ const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
           onUpdateRecord={handleUpdateRecord}
           onDeleteRecord={handleDeleteRecord}
           onSearch={handleSearch}
+          onGenerateChart={setChartModalData}
+        />
+       )}
+
+       {chartModalData && (
+        <ChartModal
+            chartData={chartModalData}
+            onClose={() => setChartModalData(null)}
         />
        )}
 
