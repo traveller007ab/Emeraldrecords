@@ -370,7 +370,11 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
                 </div>
             ) : (
                 <>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm text-gray-400 font-medium">
+                            {displayedRecords.length} {displayedRecords.length === 1 ? 'record' : 'records'}
+                        </span>
+                        <div className="h-4 w-px bg-gray-600" />
                         <Button onClick={handleToggleSelectionMode} variant="secondary" size="sm">
                            <CheckSquareIcon className="h-4 w-4 mr-2" />
                            {isSelectionMode ? 'Cancel' : 'Select'}
