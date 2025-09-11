@@ -1,16 +1,21 @@
-# This tells Netlify how to build your site.
+# This is the build configuration for Netlify.
+# It tells Netlify how to build your Vite application.
 [build]
   command = "npm run build"
   publish = "dist"
 
-# This tells Netlify where your serverless functions are.
+# This section configures your serverless functions.
+# It tells Netlify where to find your function source code.
 [functions]
   directory = "api"
 
-# This is the critical rule to fix the 404 error.
-# It forwards requests from your app's /api/ path
-# to the actual function on Netlify's backend.
+# This is the most critical part for fixing the API error.
+# It creates a routing rule (a "rewrite").
 [[redirects]]
+  # Match any request that starts with /api/
   from = "/api/*"
+  # And internally forward it to your Netlify function.
+  # The ":splat" is a placeholder for whatever comes after /api/.
   to = "/.netlify/functions/:splat"
+  # Use a 200 status code to show it's a successful proxy, not a redirect.
   status = 200
