@@ -416,7 +416,6 @@ const TableView: React.FC<TableViewProps> = ({ schema, records, onSave, onDelete
         </div>
 
         <div className="overflow-x-auto">
-{/* This is the beginning of the fix for the truncated file content */}
           {displayedRecords.length > 0 ? (
             <table className="min-w-full divide-y divide-slate-700">
                 <thead>
