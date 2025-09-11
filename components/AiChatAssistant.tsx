@@ -40,16 +40,19 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ systemDocument, onClo
     try {
       const response = await getAiResponse(systemDocument, newHistory);
       
-      if (response.toolCall) {
-        const message = response.toolCall.args?.confirmationMessage;
+      const toolCall = response.toolCall;
+      const textResponse = response.text;
+
+      if (toolCall) {
+        const message = toolCall.args?.confirmationMessage;
         if (typeof message === 'string' && message) {
           setMessages(prev => [...prev, { role: 'model', content: message }]);
-          setPendingToolCall(response.toolCall);
+          setPendingToolCall(toolCall);
         } else {
           setMessages(prev => [...prev, { role: 'model', content: "Sorry, the AI's response was incomplete. Please try again." }]);
         }
-      } else if (response.text !== undefined && response.text !== null) {
-        setMessages(prev => [...prev, { role: 'model', content: response.text }]);
+      } else if (textResponse) {
+        setMessages(prev => [...prev, { role: 'model', content: textResponse }]);
       } else {
          setMessages(prev => [...prev, { role: 'model', content: "Sorry, I received an unexpected response. Please try again." }]);
       }
