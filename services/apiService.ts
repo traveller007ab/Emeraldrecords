@@ -18,7 +18,7 @@ export const getSystemDocument = async (): Promise<System | null> => {
             return null;
         }
         console.error("Supabase getSystemDocument error:", error);
-        throw new Error(error.message);
+        throw error;
     }
     return data;
 };
@@ -37,7 +37,7 @@ export const updateSystemDocument = async (systemId: string, updates: Partial<Om
 
     if (error) {
         console.error("Supabase updateSystemDocument error:", error);
-        throw new Error(error.message);
+        throw error;
     }
     return data;
 };
@@ -53,7 +53,7 @@ export const createSystemDocument = async (newSystem: Omit<System, 'id' | 'creat
     
     if (error) {
         console.error("Supabase createSystemDocument error:", error);
-        throw new Error(error.message);
+        throw error;
     }
     return data;
 }

@@ -108,8 +108,16 @@ const App: React.FC = () => {
         setSystemDocument(doc);
     } catch (error: any) {
         console.error("Failed to load or create system document:", error);
-        // "42P01" is the PostgreSQL error code for "undefined_table"
-        if (error?.code === '42P01') {
+        // Error codes for "undefined_table":
+        // "42P01" is the PostgreSQL code.
+        // "PGRST205" is what the user's log shows from Supabase.
+        // Also checking message content for robustness.
+        const isTableMissingError =
+          error?.code === '42P01' ||
+          error?.code === 'PGRST205' ||
+          (error?.message && (error.message.includes("does not exist") || error.message.includes("Could not find the table")));
+
+        if (isTableMissingError) {
             console.log("'systems' table not found. Prompting user for setup.");
             setNeedsSetup(true);
         } else {
