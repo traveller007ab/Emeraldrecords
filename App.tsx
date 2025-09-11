@@ -9,6 +9,7 @@ import Button from './components/common/Button';
 import SurveyScreen from './components/SurveyScreen';
 import SchemaSetupScreen from './components/SqlSetupScreen';
 import { generateDatabaseSchema } from './services/geminiService';
+import FunctionsSetupScreen from './components/FunctionsSetupScreen';
 
 
 const App: React.FC = () => {
@@ -18,6 +19,7 @@ const App: React.FC = () => {
   
   // State for the initial setup flow
   const [needsSetup, setNeedsSetup] = useState<boolean>(false);
+  const [needsFunctionsSetup, setNeedsFunctionsSetup] = useState<boolean>(false);
   const [isGeneratingSchema, setIsGeneratingSchema] = useState<boolean>(false);
   const [setupInfo, setSetupInfo] = useState<{ tableName: string; schema: DatabaseSchema; sql: string; } | null>(null);
 
@@ -28,11 +30,13 @@ const App: React.FC = () => {
     setUserTables([]);
     setNeedsSetup(false);
     setSetupInfo(null);
+    setNeedsFunctionsSetup(false);
   }, []);
 
   const loadUserTables = useCallback(async () => {
     setIsLoading(true);
     setNeedsSetup(false);
+    setNeedsFunctionsSetup(false);
     setSetupInfo(null);
     try {
         const tables = await apiService.listTables();
@@ -44,8 +48,13 @@ const App: React.FC = () => {
         }
     } catch (error: any) {
         console.error("Failed to load user tables:", error);
-        alert("Could not connect to your Supabase project. Please check the credentials and network connection.");
-        handleLogout();
+        if (error?.message?.includes('function') && error?.message?.includes('does not exist')) {
+            console.warn("Helper functions appear to be missing. Starting function setup flow.");
+            setNeedsFunctionsSetup(true);
+        } else {
+            alert("Could not connect to your Supabase project. Please check the credentials and network connection.");
+            handleLogout();
+        }
     } finally {
         setIsLoading(false);
     }
@@ -112,6 +121,10 @@ const App: React.FC = () => {
   const renderContent = () => {
     if (!isLoggedIn) {
       return <LoginScreen onLogin={handleLogin} />;
+    }
+
+    if (needsFunctionsSetup) {
+        return <FunctionsSetupScreen onConfirm={loadUserTables} onLogout={handleLogout} />;
     }
 
     if (setupInfo) {

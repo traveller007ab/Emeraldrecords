@@ -9,10 +9,6 @@ export const listTables = async (): Promise<string[]> => {
 
     if (error) {
         console.error("Supabase listTables error:", error);
-        // Fallback for when the RPC is not created yet
-        if (error.message.includes('function public.list_all_tables() does not exist')) {
-            return [];
-        }
         throw error;
     }
     return data
