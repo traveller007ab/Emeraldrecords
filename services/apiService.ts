@@ -33,7 +33,7 @@ export const getTableSchema = async (tableName: string): Promise<DatabaseSchema>
     // Map the RPC result to our ColumnDefinition type
     return data.map((col: any): ColumnDefinition => ({
         id: col.column_name,
-        name: col.column_name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Prettify name
+        name: col.column_name.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()), // Prettify name
         type: mapPostgresTypeToAppType(col.data_type),
     }));
 };

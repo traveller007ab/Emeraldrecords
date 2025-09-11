@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import LoginScreen from './components/LoginScreen';
-import DataWorkspace from './components/DataWorkspace';
+import DataWorkspace from './components/DashboardScreen';
 import * as apiService from './services/apiService';
 import { setSupabaseCredentials, clearSupabaseCredentials } from './services/supabaseClient';
 import type { DatabaseSchema } from './types';
 import LogoIcon from './components/icons/LogoIcon';
 import Button from './components/common/Button';
 import SurveyScreen from './components/SurveyScreen';
-import SchemaSetupScreen from './components/SchemaSetupScreen';
+import SchemaSetupScreen from './components/SqlSetupScreen';
 import { generateDatabaseSchema } from './services/geminiService';
 
 
