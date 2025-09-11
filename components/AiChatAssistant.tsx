@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { DatabaseSchema, Record, ChatMessage, PendingActionPayload } from '../types';
+import type { DatabaseSchema, Record, ChatMessage, ToolCallPayload } from '../types';
 import { getAiChatResponse } from '../services/geminiService';
 import Button from './common/Button';
 import Input from './common/Input';
@@ -13,25 +13,27 @@ interface AiChatAssistantProps {
   schema: DatabaseSchema;
   records: Record[];
   onClose: () => void;
+  onAddRecord: (recordData: Omit<Record, 'id'>) => void;
   onUpdateRecord: (recordId: string, updates: Partial<Omit<Record, 'id'>>) => void;
+  onDeleteRecord: (recordId: string) => void;
 }
 
-const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onClose, onUpdateRecord }) => {
+const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onClose, onAddRecord, onUpdateRecord, onDeleteRecord }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'model', content: "Hello! I'm your AI assistant. Ask me questions about your data, or tell me to make changes." }
+    { role: 'model', content: "Hello! I can answer questions about your data or make changes for you. \n\nFor example, try: 'Add a new record for...' or 'What's the average value of...?'" }
   ]);
   const [userInput, setUserInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [pendingAction, setPendingAction] = useState<PendingActionPayload | null>(null);
+  const [pendingToolCall, setPendingToolCall] = useState<ToolCallPayload | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isLoading]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userInput.trim() || isLoading || pendingAction) return;
+    if (!userInput.trim() || isLoading || pendingToolCall) return;
 
     const newHistory: ChatMessage[] = [...messages, { role: 'user', content: userInput }];
     setMessages(newHistory);
@@ -39,22 +41,16 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
     setIsLoading(true);
 
     try {
-      const responseText = await getAiChatResponse(schema, records, newHistory);
+      const response = await getAiChatResponse(schema, records, newHistory);
       
-      try {
-        const parsedResponse = JSON.parse(responseText);
-        if (parsedResponse.action === 'PROPOSE_UPDATE') {
-          const { recordId, updates, confirmationMessage } = parsedResponse.payload;
-          setMessages(prev => [...prev, { role: 'model', content: confirmationMessage }]);
-          setPendingAction({ recordId, updates });
-        } else {
-           setMessages(prev => [...prev, { role: 'model', content: responseText }]);
-        }
-      } catch (parseError) {
-        // Response is not JSON, so it's a regular chat message
-        setMessages(prev => [...prev, { role: 'model', content: responseText }]);
+      if (response.toolCall) {
+        setMessages(prev => [...prev, { role: 'model', content: response.toolCall.confirmationMessage }]);
+        setPendingToolCall(response.toolCall);
+      } else if (response.text) {
+        setMessages(prev => [...prev, { role: 'model', content: response.text }]);
+      } else {
+         setMessages(prev => [...prev, { role: 'model', content: "Sorry, I received an unexpected response. Please try again." }]);
       }
-
     } catch (error) {
       console.error("AI chat error:", error);
       setMessages(prev => [...prev, { role: 'model', content: "Sorry, I encountered an error. Please try again." }]);
@@ -64,15 +60,38 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
   };
 
   const handleConfirmAction = () => {
-    if (!pendingAction) return;
-    onUpdateRecord(pendingAction.recordId, pendingAction.updates);
-    setMessages(prev => [...prev, { role: 'model', content: "Done. I've applied the update." }]);
-    setPendingAction(null);
+    if (!pendingToolCall) return;
+    
+    const { name, args } = pendingToolCall;
+    
+    try {
+      switch (name) {
+        case 'addRecord':
+          onAddRecord(args.recordData);
+          break;
+        case 'updateRecord':
+          onUpdateRecord(args.recordId, args.updates);
+          break;
+        case 'deleteRecord':
+          // The main delete handler in DashboardScreen has its own confirmation.
+          // To avoid double-confirmation, we bypass it for AI actions.
+          onDeleteRecord(args.recordId);
+          break;
+        default:
+          console.error(`Unknown tool call name: ${name}`);
+          throw new Error("Unknown action requested.");
+      }
+      setMessages(prev => [...prev, { role: 'model', content: "Done. I've made the change." }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'model', content: "It looks like there was an error performing that action." }]);
+    }
+
+    setPendingToolCall(null);
   };
 
   const handleCancelAction = () => {
     setMessages(prev => [...prev, { role: 'model', content: "Okay, I've cancelled the request." }]);
-    setPendingAction(null);
+    setPendingToolCall(null);
   };
 
   return (
@@ -112,7 +131,7 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
       </div>
 
       <div className="p-4 border-t border-slate-700">
-        {pendingAction ? (
+        {pendingToolCall ? (
           <div className="flex justify-center items-center gap-3">
             <Button onClick={handleCancelAction} variant="secondary" className="w-full">
                 <CloseIcon className="h-5 w-5 mr-2" /> No, cancel

@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type } from "@google-genai";
 import type { Handler } from '@netlify/functions';
 import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig } from '../types';
 
@@ -238,55 +238,126 @@ async function handleGenerateKanban({ schema, records }: { schema: DatabaseSchem
 
 
 async function handleChat({ schema, records, chatHistory }: { schema: DatabaseSchema, records: Record[], chatHistory: ChatMessage[] }) {
-    const latestMessage = chatHistory[chatHistory.length - 1].content;
-    const historyForPrompt = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+    
+    // --- Dynamically generate tool schemas based on the user's database schema ---
+    const recordProperties: { [key: string]: { type: Type, description: string } } = {};
+    schema.forEach(col => {
+        let geminiType: Type = Type.STRING;
+        if (col.type === 'number') geminiType = Type.NUMBER;
+        if (col.type === 'boolean') geminiType = Type.BOOLEAN;
+        recordProperties[col.id] = { type: geminiType, description: `Value for the '${col.name}' column.` };
+    });
 
-    const prompt = `
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: "addRecord",
+            description: "Adds a new record to the database. Ask for any missing required information first.",
+            parameters: {
+              type: Type.OBJECT,
+              properties: {
+                recordData: {
+                  type: Type.OBJECT,
+                  properties: recordProperties
+                },
+                confirmationMessage: { type: Type.STRING, description: "A message asking the user to confirm the action. e.g. 'You want to add a new record for... is that correct?'" }
+              },
+              required: ["recordData", "confirmationMessage"]
+            }
+          },
+          {
+            name: "updateRecord",
+            description: "Updates an existing record in the database. First, identify the unique record to update.",
+            parameters: {
+              type: Type.OBJECT,
+              properties: {
+                recordId: { type: Type.STRING, description: "The unique ID of the record to update." },
+                updates: { type: Type.OBJECT, properties: recordProperties, description: "An object with the key-value pairs to update." },
+                confirmationMessage: { type: Type.STRING, description: "A message asking the user to confirm the action. e.g. 'You want to update the status for 'Record X' to 'Completed'. Is that correct?'" }
+              },
+              required: ["recordId", "updates", "confirmationMessage"]
+            }
+          },
+          {
+            name: "deleteRecord",
+            description: "Deletes a record from the database. First, identify the unique record to delete.",
+            parameters: {
+              type: Type.OBJECT,
+              properties: {
+                recordId: { type: Type.STRING, description: "The unique ID of the record to delete." },
+                confirmationMessage: { type: Type.STRING, description: "A message asking the user to confirm the deletion. e.g. 'Are you sure you want to delete the record for 'Client X'?'" }
+              },
+              required: ["recordId", "confirmationMessage"]
+            }
+          },
+          {
+              name: 'getSummary',
+              description: 'Analyzes the dataset to answer questions, calculate totals, averages, counts, or provide other insights.',
+              parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                      question: { type: Type.STRING, description: "The user's question about the data."}
+                  },
+                  required: ["question"]
+              }
+          }
+        ]
+      }
+    ];
+
+    const systemInstruction = `
         You are an AI Chat Assistant for an application called EmeraldRecords.
-        Your purpose is to help users understand and manage their data through conversation.
+        Your purpose is to help users understand and manage their data through conversation by calling functions.
 
-        You have two primary capabilities:
-        1.  **Answering Questions**: Provide conversational, insightful answers based on the user's data. You can perform calculations like sum, average, count, etc.
-        2.  **Proposing Edits**: Propose changes to records based on user commands.
-
-        **RULES for Proposing Edits:**
-        - When the user asks to update, change, or set a value for a specific record, you MUST respond ONLY with a JSON object string.
-        - The JSON object must have this exact structure: {"action": "PROPOSE_UPDATE", "payload": {"recordId": "...", "updates": {"columnIdToUpdate": "newValue", ...}, "confirmationMessage": "..."}}
-        - 'confirmationMessage' MUST be a clear, human-readable question confirming the action. For example: "Just to confirm, you want to change the status for 'Record X' to 'Completed'. Is that correct?"
-        - To find the 'recordId', you must first identify the correct record in the provided data. Users will refer to records by a descriptive field (like a name or title). The FIRST column in the schema ('${schema[0].id}') is the most likely identifier. Match the user's description to the value in that column. If you find a match, use that record's "id" property for the "recordId" field in your JSON response.
-        - The 'updates' object should contain key-value pairs where the key is the 'columnId' from the schema and the value is the new value the user provided.
-        - If the user's command is ambiguous or you cannot confidently identify the record or the change, ask for clarification instead of outputting JSON.
-
-        **RULES for Answering Questions:**
-        - If the user's message is a question or a statement not related to editing data, provide a helpful, conversational response as a plain text string. Do NOT output JSON.
-
-        Here is the database schema:
-        ${JSON.stringify(schema)}
-
-        Here is all the current data:
-        ${JSON.stringify(records)}
-
-        Here is the conversation history so far (user messages are from the human, model messages are your previous replies):
-        ${historyForPrompt}
-
-        ---
-        User's latest message: "${latestMessage}"
-        ---
-
-        Your response:
+        - **Analyze the user's request**: Determine if they are asking a question or want to modify data (add, update, delete).
+        - **Use Tools**:
+          - If they want to modify data, call the appropriate function ('addRecord', 'updateRecord', 'deleteRecord'). You MUST provide a clear confirmation message.
+          - If they are asking a question that requires calculation or analysis (e.g., "how many", "what is the total"), use the 'getSummary' tool.
+          - For simple lookups (e.g., "what is the status of project X"), you can answer directly without a tool.
+        - **Record Identification**: To update or delete, you must identify a record's unique 'id'. The primary text identifier is usually the first column: '${schema[0].name}' (id: '${schema[0].id}'). Use the user's description to find the corresponding record 'id' from the data.
+        - **Clarification**: If a command is ambiguous (e.g., "update the record"), you MUST ask for more specific information before calling a tool.
+        
+        This is the database schema: ${JSON.stringify(schema)}
+        This is ALL the current data: ${JSON.stringify(records)}
     `;
 
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: prompt,
+        contents: chatHistory,
         config: {
-            temperature: 0.1,
+            systemInstruction,
+            temperature: 0,
         },
+        tools,
     });
+    
+    let resultBody: { text?: string; toolCall?: any } = {};
+    const functionCalls = response.candidates?.[0]?.content?.parts
+        .filter(part => !!part.functionCall)
+        .map(part => part.functionCall);
+
+    if (functionCalls && functionCalls.length > 0) {
+        const call = functionCalls[0];
+        if (call.name === 'getSummary') {
+             // If the AI wants to analyze data, we let it generate a text response based on its tool output.
+             // This is a simplified 1-step agent. A more complex agent would execute the summary and feed it back.
+             resultBody.text = `I can analyze that for you. Based on the data, the answer to "${call.args.question}" is... (summary feature coming soon).`;
+        } else {
+            // For data modification, we create a tool call for the frontend to handle.
+            resultBody.toolCall = {
+                name: call.name,
+                args: call.args,
+                confirmationMessage: call.args.confirmationMessage || "Please confirm this action."
+            };
+        }
+    } else {
+        resultBody.text = response.text;
+    }
     
     return {
         statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ response: response.text })
+        body: JSON.stringify(resultBody)
     };
 }

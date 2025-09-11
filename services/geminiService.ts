@@ -1,4 +1,4 @@
-import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig } from '../types';
+import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig, ToolCallPayload } from '../types';
 
 interface ApiRequestBody {
     action: 'generateSchema' | 'generateChart' | 'chat' | 'generateKanban';
@@ -54,7 +54,6 @@ export const getAiChatResponse = async (
     schema: DatabaseSchema,
     records: Record[],
     chatHistory: ChatMessage[]
-): Promise<string> => {
-    const { response } = await fetchFromApi<{ response: string }>('chat', { schema, records, chatHistory });
-    return response;
+): Promise<{ text?: string, toolCall?: ToolCallPayload }> => {
+    return fetchFromApi('chat', { schema, records, chatHistory });
 };

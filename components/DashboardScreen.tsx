@@ -37,28 +37,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
   const [view, setView] = useState<'table' | 'analytics' | 'kanban'>('table');
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  const handleSaveRecord = async (recordData: Omit<Record, 'id'>, editingId: string | null) => {
-    if (editingId) {
-      const updatedRecord = await apiService.updateRecord(editingId, recordData);
-      setRecords(records.map((r) => (r.id === editingId ? updatedRecord : r)));
-    } else {
-      const newRecord = await apiService.addRecord(recordData);
-      setRecords([newRecord, ...records]);
-    }
-  };
-  
-  const handleDelete = async (recordId: string) => {
-    if (window.confirm('Are you sure you want to delete this record?')) {
-      await apiService.deleteRecord(recordId);
-      setRecords(records.filter((r) => r.id !== recordId));
-    }
-  };
-  
-  const handleBulkDelete = async (recordIds: string[]) => {
-      if (window.confirm(`Are you sure you want to delete ${recordIds.length} selected records?`)) {
-          await apiService.deleteBulkRecords(recordIds);
-          setRecords(records.filter((r) => !recordIds.includes(r.id)));
-      }
+  const handleAddRecord = async (recordData: Omit<Record, 'id'>) => {
+    const newRecord = await apiService.addRecord(recordData);
+    setRecords(prevRecords => [newRecord, ...prevRecords]);
   };
 
   const handleUpdateRecord = async (recordId: string, updates: Partial<Omit<Record, 'id'>>) => {
@@ -68,6 +49,28 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
         r.id === recordId ? updatedRecord : r
       )
     );
+  };
+
+  const handleDeleteRecord = async (recordId: string) => {
+    if (window.confirm('Are you sure you want to delete this record?')) {
+        await apiService.deleteRecord(recordId);
+        setRecords(prevRecords => prevRecords.filter((r) => r.id !== recordId));
+    }
+  };
+
+  const handleSaveRecordInTable = async (recordData: Omit<Record, 'id'>, editingId: string | null) => {
+    if (editingId) {
+      handleUpdateRecord(editingId, recordData);
+    } else {
+      handleAddRecord(recordData);
+    }
+  };
+  
+  const handleBulkDelete = async (recordIds: string[]) => {
+      if (window.confirm(`Are you sure you want to delete ${recordIds.length} selected records?`)) {
+          await apiService.deleteBulkRecords(recordIds);
+          setRecords(records.filter((r) => !recordIds.includes(r.id)));
+      }
   };
 
 
@@ -129,8 +132,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
                     <TableView 
                         schema={schema}
                         records={records}
-                        onSave={handleSaveRecord}
-                        onDelete={handleDelete}
+                        onSave={handleSaveRecordInTable}
+                        onDelete={handleDeleteRecord}
                         onBulkDelete={handleBulkDelete}
                         surveyDataType={surveyData?.dataType || 'data'}
                         onOpenChat={() => setIsChatOpen(true)}
@@ -153,7 +156,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ schema, initialRecord
           schema={schema}
           records={records}
           onClose={() => setIsChatOpen(false)}
+          onAddRecord={handleAddRecord}
           onUpdateRecord={handleUpdateRecord}
+          onDeleteRecord={handleDeleteRecord}
         />
        )}
     </div>

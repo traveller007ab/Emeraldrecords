@@ -36,7 +36,8 @@ export interface ChatMessage {
     content: string;
 }
 
-export interface PendingActionPayload {
-  recordId: string;
-  updates: Partial<Omit<Record, 'id'>>;
+export interface ToolCallPayload {
+  name: 'addRecord' | 'updateRecord' | 'deleteRecord';
+  args: { [key: string]: any };
+  confirmationMessage: string;
 }
