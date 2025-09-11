@@ -1,6 +1,8 @@
-import { GoogleGenAI, Type } from "@google-genai";
+// FIX: Use the correct package name '@google/genai' as per the guidelines
+import { GoogleGenAI, Type } from "@google/genai";
 import type { Handler } from '@netlify/functions';
-import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig } from '../types';
+// FIX: Import missing types
+import type { System, ChatMessage, DatabaseSchema, Record } from '../types';
 
 // Securely read the API key from environment variables on the server.
 const apiKey = process.env.API_KEY;
@@ -11,79 +13,93 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey });
 
-
-// --- Schema definitions for Gemini's JSON mode ---
-
-const schemaResponseSchema = {
-  type: Type.OBJECT,
-  properties: {
-    tableName: {
-      type: Type.STRING,
-      description: "A database-friendly, plural, snake_case table name for the data (e.g., 'client_photoshoots')."
-    },
-    sqlSchema: {
-      type: Type.STRING,
-      description: "The full 'CREATE TABLE' SQL statement for Postgres."
-    },
-    schema: {
-      type: Type.ARRAY,
-      description: "The database table schema as a JSON array.",
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          id: {
-            type: Type.STRING,
-            description: "A unique, machine-readable key for the column in camelCase (e.g., 'firstName')."
-          },
-          name: {
-            type: Type.STRING,
-            description: "A human-readable label for the column (e.g., 'First Name')."
-          },
-          type: {
-            type: Type.STRING,
-            description: "The data type. Must be one of: 'text', 'number', 'date', or 'boolean'."
-          }
-        },
-        required: ["id", "name", "type"]
-      }
-    },
-    sampleDataJson: {
-      type: Type.STRING,
-      description: "A JSON string of an array of 3 realistic sample records. The keys in each record object MUST match the 'id' values from the generated JSON schema.",
-    }
-  },
-  required: ["tableName", "sqlSchema", "schema", "sampleDataJson"]
-};
-
-const chartConfigResponseSchema = {
+// --- Schema definition for the `updateSystem` tool ---
+const systemToolSchema = {
     type: Type.OBJECT,
     properties: {
-        chartType: { type: Type.STRING, description: "The type of chart. Must be 'bar'."},
-        title: { type: Type.STRING, description: "A concise and insightful title for the chart."},
-        categoryColumnId: { type: Type.STRING, description: "The 'id' of the column that should be used for the chart's categories (x-axis). This must be a 'text' type column."}
-    },
-    required: ["chartType", "title", "categoryColumnId"]
-};
-
-const kanbanConfigResponseSchema = {
-    type: Type.OBJECT,
-    properties: {
-        statusColumnId: { type: Type.STRING, description: "The 'id' of the 'text' column that best represents the status or stage of a record (e.g., 'status', 'progress')." },
-        cardTitleColumnId: { type: Type.STRING, description: "The 'id' of the column that should be the main title of the Kanban card. This is usually the primary descriptive field." },
-        cardDetailColumnIds: {
-            type: Type.ARRAY,
-            description: "An array of 1 to 2 column 'id's that provide useful secondary details for the card.",
-            items: { type: Type.STRING }
+        updatedSystem: {
+            type: Type.OBJECT,
+            description: "The complete, modified system object. You must provide the entire object, not just the changed parts.",
+            properties: {
+                name: { type: Type.STRING, description: "The name of the system." },
+                type: { type: Type.STRING, description: "The type of system." },
+                description: { type: Type.STRING },
+                version: { type: Type.NUMBER, description: "Increment the version number for each change." },
+                parent_version: { type: Type.NUMBER, description: "The version number this change is based on." },
+                components: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            id: { type: Type.STRING, description: "A unique identifier for the component, e.g., 'comp-uuid-1'." },
+                            name: { type: Type.STRING },
+                            category: { type: Type.STRING, description: "Must be 'core', 'subcore', or 'auxiliary'." },
+                            attributes: { type: Type.OBJECT, description: "A key-value map of component attributes." },
+                            connections: { type: Type.ARRAY, items: { type: Type.STRING }, description: "An array of component IDs it connects to." }
+                        }
+                    }
+                },
+                logic: {
+                    type: Type.OBJECT,
+                    properties: {
+                        rules: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        workflow: { type: Type.ARRAY, items: { type: Type.OBJECT } }
+                    }
+                },
+                calculations: {
+                    type: Type.OBJECT,
+                    properties: {
+                        math_engine: { type: Type.STRING },
+                        equations: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        results: { type: Type.OBJECT }
+                    }
+                },
+                diagram: {
+                    type: Type.OBJECT,
+                    properties: {
+                        nodes: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    id: { type: Type.STRING },
+                                    x: { type: Type.NUMBER },
+                                    y: { type: Type.NUMBER },
+                                    label: { type: Type.STRING }
+                                }
+                            }
+                        },
+                        edges: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    from: { type: Type.STRING },
+                                    to: { type: Type.STRING },
+                                    type: { type: Type.STRING }
+                                }
+                            }
+                        }
+                    }
+                },
+                metadata: {
+                    type: Type.OBJECT,
+                    properties: {
+                        tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        domain: { type: Type.STRING, description: "Must be one of: 'engineering', 'finance', 'ai', 'trading', 'design', 'other'." },
+                        author: { type: Type.STRING },
+                        notes: { type: Type.STRING }
+                    }
+                }
+            }
         },
-        statusColumnOrder: {
-            type: Type.ARRAY,
-            description: "An array of the unique string values from the status column, ordered in a logical workflow sequence (e.g., ['To Do', 'In Progress', 'Done']).",
-            items: { type: Type.STRING }
+        confirmationMessage: {
+            type: Type.STRING,
+            description: "A clear, user-friendly message asking the user to confirm the proposed change. E.g., 'It looks like you want to add a new 'Boiler' component. Is that correct?'"
         }
     },
-    required: ["statusColumnId", "cardTitleColumnId", "cardDetailColumnIds", "statusColumnOrder"]
+    required: ["updatedSystem", "confirmationMessage"]
 };
-
 
 // --- Handler for incoming requests from the frontend ---
 export const handler: Handler = async (event) => {
@@ -98,236 +114,62 @@ export const handler: Handler = async (event) => {
     const { action, payload } = JSON.parse(event.body);
 
     switch (action) {
-      case 'generateSchema':
-        return handleGenerateSchema(payload);
-      case 'generateChart':
-        return handleGenerateChart(payload);
-      case 'generateKanban':
-        return handleGenerateKanban(payload);
-      case 'chat':
-        return handleChat(payload);
+      case 'getAiResponse':
+        return handleAiResponse(payload);
+      // FIX: Add handlers for new actions
+      case 'generateChartAnalytics':
+        return handleGenerateChartAnalytics(payload);
+      case 'generateKanbanConfig':
+        return handleGenerateKanbanConfig(payload);
       default:
         return { statusCode: 400, body: JSON.stringify({ error: 'Invalid action' })};
     }
   } catch (error) {
     console.error("Error in API route:", error);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Internal Server Error' }) };
+    const message = error instanceof Error ? error.message : 'An unknown error occurred.';
+    return { statusCode: 500, body: JSON.stringify({ error: `Internal Server Error: ${message}` }) };
   }
 };
 
-
-// --- Action-specific handlers ---
-
-async function handleGenerateSchema({ occupation, dataType }: { occupation: string, dataType: string }) {
-   const prompt = `
-    You are an expert database designer creating a tailored schema for a user to use with a Postgres database (Supabase).
-    The user's occupation is: "${occupation}".
-    The type of data they want to manage is: "${dataType}".
-
-    Based on this, design a simple and effective database table schema and generate the corresponding SQL CREATE TABLE statement.
-    Your response must be a single JSON object.
-
-    1.  **tableName**: Generate a database-friendly, plural, snake_case table name (e.g., 'client_photoshoots', 'property_listings').
-    2.  **schema**: Generate a JSON schema as an array of column objects. Each object must have an 'id' (camelCase key), a 'name' (human-readable label), and a 'type' ('text', 'number', 'date', or 'boolean'). The first column should be a descriptive primary identifier.
-    3.  **sqlSchema**: Generate the full SQL "CREATE TABLE" statement for Postgres.
-        - The table name must match the 'tableName' you generated.
-        - It MUST include an 'id' column of type UUID as the PRIMARY KEY with a default of gen_random_uuid().
-        - It MUST include a 'created_at' column of type TIMESTAMPTZ with a default of now().
-        - For the other columns from your JSON schema, map their types as follows: 'text' -> TEXT, 'number' -> NUMERIC, 'date' -> DATE, 'boolean' -> BOOLEAN.
-        - Column names in the SQL schema should be snake_case versions of the JSON schema 'id's (e.g., 'firstName' becomes 'first_name').
-    4.  **sampleDataJson**: Generate a JSON string of an array of 3 realistic and diverse sample records that fit this schema. Do not include 'id' or 'created_at' fields in the sample data objects, as the database will generate them.
-  `;
-  
-  const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schemaResponseSchema,
-        temperature: 0.2,
-      },
-  });
-
-  const parsedData = JSON.parse(response.text);
-  const sampleData = JSON.parse(parsedData.sampleDataJson);
-
-  const result = {
-      schema: parsedData.schema,
-      sampleData: sampleData,
-      tableName: parsedData.tableName,
-      sqlSchema: parsedData.sqlSchema,
-  };
-
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(result)
-  };
-}
-
-async function handleGenerateChart({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
-    const textColumns = schema.filter(col => col.type === 'text').map(col => `'${col.id}'`).join(', ');
-    const recordsSample = JSON.stringify(records.slice(0, 10));
-
-    const prompt = `
-        You are a data analyst. Based on the provided database schema and a sample of records, suggest the most insightful bar chart configuration.
-        The goal is to visualize the distribution of data in a categorical column.
-
-        Schema: ${JSON.stringify(schema)}
-        Records sample: ${recordsSample}
-
-        1. Choose the best 'text' column for a categorical analysis. Good candidates are columns representing status, type, category, etc. Avoid columns with unique identifiers or free-form text.
-        2. From these available 'text' column IDs: ${textColumns}.
-        3. Create an insightful title for the chart based on the chosen column.
-        4. Your response MUST be a JSON object matching the required schema.
-    `;
+async function handleAiResponse({ systemDocument, chatHistory }: { systemDocument: System, chatHistory: ChatMessage[] }) {
     
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: chartConfigResponseSchema,
-            temperature: 0.3,
-        }
-    });
-    
-    const result = JSON.parse(response.text);
-    return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(result)
-    };
-}
-
-async function handleGenerateKanban({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
-    const recordsSample = records.slice(0, 25);
-
-    const prompt = `
-      You are a UI configuration expert. Your task is to analyze a database schema and sample records to determine the best configuration for a Kanban board.
-
-      Database Schema: ${JSON.stringify(schema)}
-      Sample Records: ${JSON.stringify(recordsSample)}
-
-      Instructions:
-      1.  **statusColumnId**: Identify the single 'text' column that best represents a workflow status (e.g., 'status', 'progress', 'stage'). This column should have a limited number of repeating values that represent distinct stages.
-      2.  **statusColumnOrder**: After identifying the status column, find all of its unique values from the sample records. Return these unique values as an array of strings, sorted in a logical progression that makes sense for a workflow (e.g., from start to finish, like ["To Do", "In Progress", "Done"]).
-      3.  **cardTitleColumnId**: Identify the single column that serves as the best title for a Kanban card. This is typically the primary identifier of the record, like a name, title, or task description.
-      4.  **cardDetailColumnIds**: Select 1 or 2 other columns that provide useful, concise context on the card. Good candidates are dates, assignees, or priority levels. Do not select the status or title column again.
-
-      Your response must be a single JSON object matching the required schema.
-    `;
-
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: kanbanConfigResponseSchema,
-            temperature: 0.2,
-        },
-    });
-
-    const result = JSON.parse(response.text);
-    return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(result)
-    };
-}
-
-
-async function handleChat({ schema, records, chatHistory }: { schema: DatabaseSchema, records: Record[], chatHistory: ChatMessage[] }) {
-    
-    // --- Dynamically generate tool schemas based on the user's database schema ---
-    const recordProperties: { [key: string]: { type: Type, description: string } } = {};
-    schema.forEach(col => {
-        let geminiType: Type = Type.STRING;
-        if (col.type === 'number') geminiType = Type.NUMBER;
-        if (col.type === 'boolean') geminiType = Type.BOOLEAN;
-        recordProperties[col.id] = { type: geminiType, description: `Value for the '${col.name}' column.` };
-    });
-
-    const tools = [
-      {
-        functionDeclarations: [
-          {
-            name: "addRecord",
-            description: "Adds a new record to the database. Ask for any missing required information first.",
-            parameters: {
-              type: Type.OBJECT,
-              properties: {
-                recordData: {
-                  type: Type.OBJECT,
-                  properties: recordProperties
-                },
-                confirmationMessage: { type: Type.STRING, description: "A message asking the user to confirm the action. e.g. 'You want to add a new record for... is that correct?'" }
-              },
-              required: ["recordData", "confirmationMessage"]
-            }
-          },
-          {
-            name: "updateRecord",
-            description: "Updates an existing record in the database. First, identify the unique record to update.",
-            parameters: {
-              type: Type.OBJECT,
-              properties: {
-                recordId: { type: Type.STRING, description: "The unique ID of the record to update." },
-                updates: { type: Type.OBJECT, properties: recordProperties, description: "An object with the key-value pairs to update." },
-                confirmationMessage: { type: Type.STRING, description: "A message asking the user to confirm the action. e.g. 'You want to update the status for 'Record X' to 'Completed'. Is that correct?'" }
-              },
-              required: ["recordId", "updates", "confirmationMessage"]
-            }
-          },
-          {
-            name: "deleteRecord",
-            description: "Deletes a record from the database. First, identify the unique record to delete.",
-            parameters: {
-              type: Type.OBJECT,
-              properties: {
-                recordId: { type: Type.STRING, description: "The unique ID of the record to delete." },
-                confirmationMessage: { type: Type.STRING, description: "A message asking the user to confirm the deletion. e.g. 'Are you sure you want to delete the record for 'Client X'?'" }
-              },
-              required: ["recordId", "confirmationMessage"]
-            }
-          },
-          {
-              name: 'getSummary',
-              description: 'Analyzes the dataset to answer questions, calculate totals, averages, counts, or provide other insights.',
-              parameters: {
-                  type: Type.OBJECT,
-                  properties: {
-                      question: { type: Type.STRING, description: "The user's question about the data."}
-                  },
-                  required: ["question"]
-              }
-          }
-        ]
-      }
-    ];
+    const tools = [{
+        functionDeclarations: [{
+            name: "updateSystem",
+            description: "Modifies the system document based on the user's request. Always increment the version number.",
+            parameters: systemToolSchema,
+        }]
+    }];
 
     const systemInstruction = `
-        You are an AI Chat Assistant for an application called EmeraldRecords.
-        Your purpose is to help users understand and manage their data through conversation by calling functions.
+        You are an AI system architect. Your goal is to help the user model a complex system by modifying a JSON document.
+        The user will describe a change, and you will call the 'updateSystem' function with the new, complete JSON object.
 
-        - **Analyze the user's request**: Determine if they are asking a question or want to modify data (add, update, delete).
-        - **Use Tools**:
-          - If they want to modify data, call the appropriate function ('addRecord', 'updateRecord', 'deleteRecord'). You MUST provide a clear confirmation message.
-          - If they are asking a question that requires calculation or analysis (e.g., "how many", "what is the total"), use the 'getSummary' tool.
-          - For simple lookups (e.g., "what is the status of project X"), you can answer directly without a tool.
-        - **Record Identification**: To update or delete, you must identify a record's unique 'id'. The primary text identifier is usually the first column: '${schema[0].name}' (id: '${schema[0].id}'). Use the user's description to find the corresponding record 'id' from the data.
-        - **Clarification**: If a command is ambiguous (e.g., "update the record"), you MUST ask for more specific information before calling a tool.
+        **Core Rules:**
+        1.  **Full Document Update**: You MUST provide the entire, updated system document in the 'updatedSystem' argument. Do not provide only the changed parts.
+        2.  **Immutability**: Treat the input JSON as immutable. Generate a new version of it with the requested modifications.
+        3.  **Version Increment**: You MUST increment the 'version' number by 1 for every change. The 'parent_version' should be the version number from the input document.
+        4.  **ID Generation**: For new components or diagram nodes, you MUST generate a new, unique, and descriptive ID (e.g., 'comp-boiler-1', 'node-turbine').
+        5.  **Confirmation**: You MUST create a clear, concise confirmation message for the user.
+        6.  **Clarification**: If the user's request is ambiguous, do not call the tool. Instead, ask clarifying questions as a text response.
+        7.  **Preserve Data**: Do not delete or alter parts of the JSON that the user did not ask to change.
         
-        This is the database schema: ${JSON.stringify(schema)}
-        This is ALL the current data: ${JSON.stringify(records)}
+        The user's current system document is:
+        ${JSON.stringify(systemDocument)}
     `;
+
+    // FIX: Map chat history to the format expected by the Gemini API
+    const contents = chatHistory.map(msg => ({
+        role: msg.role,
+        parts: [{ text: msg.content }],
+    }));
 
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: chatHistory,
+        contents,
         config: {
             systemInstruction,
-            temperature: 0,
+            temperature: 0.1,
         },
         tools,
     });
@@ -339,18 +181,10 @@ async function handleChat({ schema, records, chatHistory }: { schema: DatabaseSc
 
     if (functionCalls && functionCalls.length > 0) {
         const call = functionCalls[0];
-        if (call.name === 'getSummary') {
-             // If the AI wants to analyze data, we let it generate a text response based on its tool output.
-             // This is a simplified 1-step agent. A more complex agent would execute the summary and feed it back.
-             resultBody.text = `I can analyze that for you. Based on the data, the answer to "${call.args.question}" is... (summary feature coming soon).`;
-        } else {
-            // For data modification, we create a tool call for the frontend to handle.
-            resultBody.toolCall = {
-                name: call.name,
-                args: call.args,
-                confirmationMessage: call.args.confirmationMessage || "Please confirm this action."
-            };
-        }
+        resultBody.toolCall = {
+            name: call.name,
+            args: call.args,
+        };
     } else {
         resultBody.text = response.text;
     }
@@ -359,5 +193,110 @@ async function handleChat({ schema, records, chatHistory }: { schema: DatabaseSc
         statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(resultBody)
+    };
+}
+
+// FIX: Add handler for generating chart analytics
+async function handleGenerateChartAnalytics({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
+    const chartConfigSchema = {
+        type: Type.OBJECT,
+        properties: {
+            title: { type: Type.STRING, description: "A descriptive title for the chart. e.g., 'Record Count by Status'." },
+            categoryColumnId: { type: Type.STRING, description: "The ID of the column that should be used for the chart's categories (x-axis). This should be a column with a limited number of unique values, like a 'status' or 'type' column." },
+        },
+        required: ['title', 'categoryColumnId'],
+    };
+
+    const systemInstruction = `
+        You are a data analyst. Your task is to analyze the provided database schema and a sample of records to suggest a good bar chart configuration.
+        Identify a column that is suitable for categorization (e.g., a 'status', 'type', or 'priority' column with a limited number of distinct string values).
+        Based on this, create a chart configuration.
+        
+        Database Schema:
+        ${JSON.stringify(schema)}
+
+        Sample Records (first 5):
+        ${JSON.stringify(records.slice(0, 5))}
+    `;
+    
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: "Generate a chart configuration for the provided data.",
+        config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: chartConfigSchema,
+            temperature: 0,
+        },
+    });
+
+    const config = JSON.parse(response.text);
+
+    return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    };
+}
+
+// FIX: Add handler for generating Kanban board configuration
+async function handleGenerateKanbanConfig({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
+    const kanbanConfigSchema = {
+        type: Type.OBJECT,
+        properties: {
+            statusColumnId: { type: Type.STRING, description: "The ID of the column that represents the Kanban status (e.g., 'status', 'stage'). This column should contain values like 'To Do', 'In Progress', 'Done'." },
+            cardTitleColumnId: { type: Type.STRING, description: "The ID of the column that should be used as the title for each Kanban card (e.g., 'task_name', 'client_name')." },
+            cardDetailColumnIds: { type: Type.ARRAY, items: { type: Type.STRING }, description: "An array of 1 to 3 column IDs to show as details on the Kanban card." },
+            statusColumnOrder: { type: Type.ARRAY, items: { type: Type.STRING }, description: "An array of the unique status values from the status column, in a logical order (e.g., ['To Do', 'In Progress', 'Done'])." },
+        },
+        required: ['statusColumnId', 'cardTitleColumnId', 'cardDetailColumnIds', 'statusColumnOrder'],
+    };
+
+    const potentialStatusCols = schema.filter(c => c.type === 'select' || (c.name.toLowerCase().includes('status') || c.name.toLowerCase().includes('stage')));
+    const uniqueStatusValues: { [key: string]: string[] } = {};
+    if (records.length > 0) {
+        for (const col of potentialStatusCols) {
+            const values = Array.from(new Set(records.map(r => r[col.id]?.toString()).filter(Boolean)));
+            if (values.length > 1 && values.length < 10) { 
+                uniqueStatusValues[col.id] = values;
+            }
+        }
+    }
+
+    const systemInstruction = `
+        You are an AI assistant that configures Kanban boards. Your task is to analyze a database schema and sample records to determine the best columns for a Kanban board.
+
+        1.  **Identify Status Column**: Find a column that represents the status or stage of a record. This is the most important step. Common names are 'status', 'stage', 'progress'. The column should have a small number of distinct values.
+        2.  **Identify Title Column**: Find a column suitable for the card title, like a name or summary.
+        3.  **Identify Detail Columns**: Select 1 to 3 other important columns to display on the card.
+        4.  **Order Statuses**: Determine a logical workflow order for the values in the status column.
+
+        Database Schema:
+        ${JSON.stringify(schema)}
+        
+        Potential Status Columns and their unique values found in the data:
+        ${JSON.stringify(uniqueStatusValues)}
+
+        Sample Records (first 5):
+        ${JSON.stringify(records.slice(0, 5))}
+    `;
+    
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: "Generate a Kanban board configuration for the provided data.",
+        config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: kanbanConfigSchema,
+            temperature: 0,
+        },
+    });
+
+    const config = JSON.parse(response.text);
+
+    return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
     };
 }

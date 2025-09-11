@@ -1,44 +1,71 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import LoginScreen from './components/LoginScreen';
-import SurveyScreen from './components/SurveyScreen';
 import DashboardScreen from './components/DashboardScreen';
-import SqlSetupScreen from './components/SqlSetupScreen';
-import { generateSchemaAndData } from './services/geminiService';
 import * as apiService from './services/apiService';
 import { setSupabaseCredentials, clearSupabaseCredentials } from './services/supabaseClient';
-import type { DatabaseSchema, Record, SurveyData } from './types';
+import type { System } from './types';
 import LogoIcon from './components/icons/LogoIcon';
+// FIX: Import Button component
+import Button from './components/common/Button';
 
-interface SetupInfo {
-  tableName: string;
-  sqlSchema: string;
-  schema: DatabaseSchema;
-  sampleData: Record[];
-  surveyData: SurveyData;
-}
+const createDefaultSystem = (): Omit<System, 'id' | 'created_at' | 'updated_at'> => ({
+  name: "New System",
+  type: "Default",
+  description: "A new system document to get you started.",
+  version: 1,
+  parent_version: null,
+  components: [],
+  logic: {
+    rules: [],
+    workflow: [],
+  },
+  calculations: {
+    math_engine: "sympy",
+    equations: [],
+    results: {},
+  },
+  diagram: {
+    nodes: [],
+    edges: [],
+  },
+  metadata: {
+    tags: ["new"],
+    domain: "other",
+    author: "AI Assistant",
+    notes: "Created automatically.",
+  },
+});
+
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [surveyData, setSurveyData] = useState<SurveyData | null>(null);
-  const [schema, setSchema] = useState<DatabaseSchema | null>(null);
-  const [records, setRecords] = useState<Record[]>([]);
-  const [setupInfo, setSetupInfo] = useState<SetupInfo | null>(null);
+  const [systemDocument, setSystemDocument] = useState<System | null>(null);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('emerald-isLoggedIn');
-    localStorage.removeItem('emerald-tableName');
-    localStorage.removeItem('emerald-schema');
-    localStorage.removeItem('emerald-surveyData');
     clearSupabaseCredentials();
-    
     setIsLoggedIn(false);
-    setSchema(null);
-    setSurveyData(null);
-    setRecords([]);
-    setSetupInfo(null);
+    setSystemDocument(null);
   }, []);
 
+  const loadSystem = useCallback(async () => {
+    setIsLoading(true);
+    try {
+        let doc = await apiService.getSystemDocument();
+        if (!doc) {
+            console.log("No document found, creating a default one.");
+            doc = await apiService.createSystemDocument(createDefaultSystem());
+        }
+        setSystemDocument(doc);
+    } catch (error) {
+        console.error("Failed to load or create system document:", error);
+        alert("Could not load your system document. Please check your Supabase connection, permissions, and ensure a 'systems' table exists.");
+        handleLogout();
+    } finally {
+        setIsLoading(false);
+    }
+  }, [handleLogout]);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -50,88 +77,52 @@ const App: React.FC = () => {
         if (savedIsLoggedIn === 'true' && savedUrl && savedKey) {
           setSupabaseCredentials(savedUrl, savedKey);
           setIsLoggedIn(true);
-
-          const savedTableName = localStorage.getItem('emerald-tableName');
-          const savedSchema = localStorage.getItem('emerald-schema');
-          const savedSurveyData = localStorage.getItem('emerald-surveyData');
-
-          if (savedTableName && savedSchema && savedSurveyData) {
-            const parsedSchema = JSON.parse(savedSchema);
-            const parsedSurveyData = JSON.parse(savedSurveyData);
-
-            setSchema(parsedSchema);
-            setSurveyData(parsedSurveyData);
-
-            const serverRecords = await apiService.getRecords();
-            setRecords(serverRecords);
-          }
+          await loadSystem();
         }
       } catch (error) {
-        console.error("Failed to load data:", error);
-        // If there's an error (e.g., bad Supabase key), log the user out.
+        console.error("Failed to initialize:", error);
         handleLogout();
       } finally {
         setIsLoading(false);
       }
     };
     loadInitialData();
-  }, [handleLogout]);
+  }, [loadSystem, handleLogout]);
 
   const handleLogin = (supabaseUrl: string, supabaseAnonKey: string) => {
     setSupabaseCredentials(supabaseUrl, supabaseAnonKey);
     localStorage.setItem('emerald-isLoggedIn', 'true');
     setIsLoggedIn(true);
+    loadSystem();
   };
 
-  const handleSurveySubmit = useCallback(async (occupation: string, dataType: string) => {
-    setIsLoading(true);
+  const handleSystemUpdate = async (updatedDocument: System) => {
+    // Optimistically update the UI
+    setSystemDocument(updatedDocument);
     try {
-      const result = await generateSchemaAndData(occupation, dataType);
-      setSetupInfo({ ...result, surveyData: { occupation, dataType } });
-    } catch (error) {
-      console.error("Failed to generate schema:", error);
-      alert("There was an error generating your database schema. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const handleConfirmSqlSetup = async (confirmedSetupInfo: SetupInfo) => {
-    setIsLoading(true);
-    try {
-        localStorage.setItem('emerald-tableName', confirmedSetupInfo.tableName);
-        localStorage.setItem('emerald-schema', JSON.stringify(confirmedSetupInfo.schema));
-        localStorage.setItem('emerald-surveyData', JSON.stringify(confirmedSetupInfo.surveyData));
-
-        if (confirmedSetupInfo.sampleData.length > 0) {
-            await apiService.addBulkRecords(confirmedSetupInfo.sampleData);
-        }
-
-        const serverRecords = await apiService.getRecords();
-        
-        setSchema(confirmedSetupInfo.schema);
-        setSurveyData(confirmedSetupInfo.surveyData);
-        setRecords(serverRecords);
-        setSetupInfo(null);
-    } catch (error) {
-        console.error("Failed to set up database and insert sample data:", error);
-        alert("There was an error setting up your database. Please ensure the table was created correctly in Supabase and try again.");
-    } finally {
-        setIsLoading(false);
+        await apiService.updateSystemDocument(updatedDocument.id, updatedDocument);
+    } catch (err) {
+        console.error("Failed to persist system update:", err);
+        alert("Failed to save changes to the database. Your last change might not be saved.");
+        // Optional: Add logic to revert to the previous state.
+        loadSystem(); 
     }
   };
-
-  const resetSurvey = async () => {
-    if (window.confirm("Are you sure you want to reset your database? This will erase your current schema and all records from this app.\n\nNOTE: This will NOT delete the table from your Supabase project.")) {
-      localStorage.removeItem('emerald-tableName');
-      localStorage.removeItem('emerald-schema');
-      localStorage.removeItem('emerald-surveyData');
-      setSurveyData(null);
-      setSchema(null);
-      setRecords([]);
-      setSetupInfo(null);
-    }
-  };
+  
+  const handleResetSystem = async () => {
+      if (systemDocument && window.confirm("Are you sure you want to reset the system to its default state? This cannot be undone.")) {
+          setIsLoading(true);
+          const newDoc = createDefaultSystem();
+          try {
+            const updatedDoc = await apiService.updateSystemDocument(systemDocument.id, newDoc as Partial<System>);
+            setSystemDocument(updatedDoc);
+          } catch(err) {
+            alert("Failed to reset the system.");
+          } finally {
+            setIsLoading(false);
+          }
+      }
+  }
 
   if (isLoading) {
     return (
@@ -145,24 +136,21 @@ const App: React.FC = () => {
     <div className="min-h-screen">
       {!isLoggedIn ? (
         <LoginScreen onLogin={handleLogin} />
-      ) : !schema ? (
-        setupInfo ? (
-            <SqlSetupScreen
-                tableName={setupInfo.tableName}
-                sqlSchema={setupInfo.sqlSchema}
-                onConfirm={() => handleConfirmSqlSetup(setupInfo)}
-            />
-        ) : (
-          <SurveyScreen onSubmit={handleSurveySubmit} isLoading={isLoading} />
-        )
-      ) : (
+      ) : systemDocument ? (
         <DashboardScreen
-          schema={schema}
-          initialRecords={records}
+          systemDocument={systemDocument}
+          onSystemUpdate={handleSystemUpdate}
           onLogout={handleLogout}
-          surveyData={surveyData}
-          onResetSurvey={resetSurvey}
+          onResetSystem={handleResetSystem}
         />
+      ) : (
+         <div className="min-h-screen w-full flex items-center justify-center p-4 text-center">
+            <div>
+                <h2 className="text-2xl font-bold text-red-400">Error Loading System</h2>
+                <p className="text-slate-400 mt-2">Could not load or create a system document. Please check the console for errors.</p>
+                <Button onClick={handleLogout} className="mt-4">Logout</Button>
+            </div>
+        </div>
       )}
     </div>
   );

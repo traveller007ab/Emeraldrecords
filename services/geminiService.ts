@@ -1,7 +1,8 @@
-import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig, ToolCallPayload } from '../types';
+import type { System, ChatMessage, ToolCallPayload, DatabaseSchema, Record, ChartConfig, KanbanConfig } from '../types';
 
 interface ApiRequestBody {
-    action: 'generateSchema' | 'generateChart' | 'chat' | 'generateKanban';
+    // FIX: Add new actions to support Analytics and Kanban views
+    action: 'getAiResponse' | 'generateChartAnalytics' | 'generateKanbanConfig';
     payload: any;
 }
 
@@ -27,33 +28,18 @@ async function fetchFromApi<T>(action: ApiRequestBody['action'], payload: any): 
     }
 }
 
-
-export const generateSchemaAndData = async (
-  occupation: string,
-  dataType: string
-): Promise<{ schema: DatabaseSchema; sampleData: Record[]; tableName: string; sqlSchema: string; }> => {
-    return fetchFromApi('generateSchema', { occupation, dataType });
-};
-
-export const generateChartAnalytics = async (
-    schema: DatabaseSchema,
-    records: Record[]
-): Promise<ChartConfig> => {
-    return fetchFromApi('generateChart', { schema, records });
-}
-
-export const generateKanbanConfig = async (
-    schema: DatabaseSchema,
-    records: Record[]
-): Promise<KanbanConfig> => {
-    return fetchFromApi('generateKanban', { schema, records });
-}
-
-
-export const getAiChatResponse = async (
-    schema: DatabaseSchema,
-    records: Record[],
+export const getAiResponse = async (
+    systemDocument: System,
     chatHistory: ChatMessage[]
 ): Promise<{ text?: string, toolCall?: ToolCallPayload }> => {
-    return fetchFromApi('chat', { schema, records, chatHistory });
+    return fetchFromApi('getAiResponse', { systemDocument, chatHistory });
+};
+
+// FIX: Add missing service functions for Analytics and Kanban views
+export const generateChartAnalytics = async (schema: DatabaseSchema, records: Record[]): Promise<ChartConfig> => {
+    return fetchFromApi('generateChartAnalytics', { schema, records });
+};
+
+export const generateKanbanConfig = async (schema: DatabaseSchema, records: Record[]): Promise<KanbanConfig> => {
+    return fetchFromApi('generateKanbanConfig', { schema, records });
 };

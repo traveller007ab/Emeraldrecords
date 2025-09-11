@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { DatabaseSchema, Record, ChatMessage, ToolCallPayload } from '../types';
-import { getAiChatResponse } from '../services/geminiService';
+import type { System, ChatMessage, ToolCallPayload } from '../types';
+import { getAiResponse } from '../services/geminiService';
 import Button from './common/Button';
 import Input from './common/Input';
 import CloseIcon from './icons/CloseIcon';
@@ -10,17 +10,14 @@ import LogoIcon from './icons/LogoIcon';
 import CheckIcon from './icons/CheckIcon';
 
 interface AiChatAssistantProps {
-  schema: DatabaseSchema;
-  records: Record[];
+  systemDocument: System;
   onClose: () => void;
-  onAddRecord: (recordData: Omit<Record, 'id'>) => void;
-  onUpdateRecord: (recordId: string, updates: Partial<Omit<Record, 'id'>>) => void;
-  onDeleteRecord: (recordId: string) => void;
+  onSystemUpdate: (updatedDocument: System) => void;
 }
 
-const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onClose, onAddRecord, onUpdateRecord, onDeleteRecord }) => {
+const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ systemDocument, onClose, onSystemUpdate }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'model', content: "Hello! I can answer questions about your data or make changes for you. \n\nFor example, try: 'Add a new record for...' or 'What's the average value of...?'" }
+    { role: 'model', content: "Hello! I am your AI system architect. Describe the changes you want to make to your system document. \n\nFor example, try: 'Add a new component named Boiler with core category' or 'Create a diagram node for the new boiler'." }
   ]);
   const [userInput, setUserInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -41,10 +38,10 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
     setIsLoading(true);
 
     try {
-      const response = await getAiChatResponse(schema, records, newHistory);
+      const response = await getAiResponse(systemDocument, newHistory);
       
       if (response.toolCall) {
-        setMessages(prev => [...prev, { role: 'model', content: response.toolCall.confirmationMessage }]);
+        setMessages(prev => [...prev, { role: 'model', content: response.toolCall.args.confirmationMessage }]);
         setPendingToolCall(response.toolCall);
       } else if (response.text) {
         setMessages(prev => [...prev, { role: 'model', content: response.text }]);
@@ -65,24 +62,21 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
     const { name, args } = pendingToolCall;
     
     try {
-      switch (name) {
-        case 'addRecord':
-          onAddRecord(args.recordData);
-          break;
-        case 'updateRecord':
-          onUpdateRecord(args.recordId, args.updates);
-          break;
-        case 'deleteRecord':
-          // The main delete handler in DashboardScreen has its own confirmation.
-          // To avoid double-confirmation, we bypass it for AI actions.
-          onDeleteRecord(args.recordId);
-          break;
-        default:
-          console.error(`Unknown tool call name: ${name}`);
-          throw new Error("Unknown action requested.");
+      if (name === 'updateSystem') {
+          // The AI might not include these fields, so we preserve them from the original document
+          const finalSystem = {
+              ...args.updatedSystem,
+              id: systemDocument.id,
+              created_at: systemDocument.created_at,
+          };
+          onSystemUpdate(finalSystem);
+      } else {
+        console.error(`Unknown tool call name: ${name}`);
+        throw new Error("Unknown action requested.");
       }
-      setMessages(prev => [...prev, { role: 'model', content: "Done. I've made the change." }]);
+      setMessages(prev => [...prev, { role: 'model', content: "Done. I've updated the system document." }]);
     } catch (err) {
+      console.error(err)
       setMessages(prev => [...prev, { role: 'model', content: "It looks like there was an error performing that action." }]);
     }
 
@@ -146,7 +140,7 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ schema, records, onCl
               type="text"
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
-              placeholder="Ask or command..."
+              placeholder="Describe a change..."
               className="flex-1 !py-2"
               disabled={isLoading}
             />
