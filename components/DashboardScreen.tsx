@@ -12,6 +12,8 @@ import KanbanView from './KanbanView';
 import AnalyticsView from './AnalyticsView';
 import * as apiService from '../services/apiService';
 import Spinner from './common/Spinner';
+import SparklesIcon from './icons/SparklesIcon';
+import CloseIcon from './icons/CloseIcon';
 
 interface DataWorkspaceProps {
   tables: string[];
@@ -33,7 +35,7 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 
 
 const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
-  const [isChatOpen, setIsChatOpen] = useState(true);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('table');
   const [selectedTable, setSelectedTable] = useState<string>(tables[0]);
   const [schema, setSchema] = useState<DatabaseSchema | null>(null);
@@ -196,6 +198,17 @@ const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
           onSearch={handleSearch}
         />
        )}
+
+       <button
+          onClick={() => setIsChatOpen(prev => !prev)}
+          className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 bg-emerald-500 from-emerald-500 to-emerald-600 bg-gradient-to-br text-white rounded-full p-3 sm:p-4 shadow-lg shadow-emerald-700/30 transition-all duration-300 ease-in-out transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-emerald-400 z-40"
+          aria-label={isChatOpen ? "Close AI Assistant" : "Open AI Assistant"}
+        >
+          {isChatOpen 
+            ? <CloseIcon className="h-6 w-6 sm:h-7 sm:w-7" /> 
+            : <SparklesIcon className="h-6 w-6 sm:h-7 sm:w-7" />
+          }
+       </button>
     </div>
   );
 };
