@@ -71,8 +71,10 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ systemDocument, onClo
     
     try {
       if (name === 'updateSystem') {
-          // The AI might not include these fields, so we preserve them from the original document
+          // Merge the existing document with the AI's update to prevent data loss
+          // if the AI returns a partial object.
           const finalSystem = {
+              ...systemDocument,
               ...args.updatedSystem,
               id: systemDocument.id,
               created_at: systemDocument.created_at,
