@@ -2,11 +2,13 @@ import { GoogleGenAI, Type } from "@google/genai";
 import type { Handler } from '@netlify/functions';
 import type { DatabaseSchema, Record, ChartConfig, ChatMessage, KanbanConfig } from '../types';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+// The user-provided API key is now hardcoded here.
+const apiKey = "AIzaSyDfkQogjsCorTztjR9FpbBVh5S-Fd_OSok";
+if (!apiKey) {
+  throw new Error("API_KEY is not set");
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey });
 
 
 // --- Schema definitions for Gemini's JSON mode ---
