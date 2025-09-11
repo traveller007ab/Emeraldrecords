@@ -133,7 +133,7 @@ const App: React.FC = () => {
     }
   };
 
-  if (isLoading && !localStorage.getItem('emerald-isLoggedIn')) {
+  if (isLoading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-gray-900">
         <LogoIcon className="h-16 w-16 animate-pulse text-emerald-500" />
