@@ -72,9 +72,14 @@ const kanbanConfigResponseSchema = {
             type: Type.ARRAY,
             description: "An array of 1 to 2 column 'id's that provide useful secondary details for the card.",
             items: { type: Type.STRING }
+        },
+        statusColumnOrder: {
+            type: Type.ARRAY,
+            description: "An array of the unique string values from the status column, ordered in a logical workflow sequence (e.g., ['To Do', 'In Progress', 'Done']).",
+            items: { type: Type.STRING }
         }
     },
-    required: ["statusColumnId", "cardTitleColumnId", "cardDetailColumnIds"]
+    required: ["statusColumnId", "cardTitleColumnId", "cardDetailColumnIds", "statusColumnOrder"]
 };
 
 
@@ -180,25 +185,19 @@ async function handleGenerateChart({ schema, records }: { schema: DatabaseSchema
 }
 
 async function handleGenerateKanban({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
-    const textColumns = schema.filter(col => col.type === 'text');
-    const recordsSample = records.slice(0, 5).map(rec => {
-        const sampleRec: {[key: string]: any} = {};
-        textColumns.forEach(col => {
-            sampleRec[col.id] = rec[col.id];
-        });
-        return sampleRec;
-    });
+    const recordsSample = records.slice(0, 25);
 
     const prompt = `
       You are a UI configuration expert. Your task is to analyze a database schema and sample records to determine the best configuration for a Kanban board.
 
       Database Schema: ${JSON.stringify(schema)}
-      Sample Records (text fields only): ${JSON.stringify(recordsSample)}
+      Sample Records: ${JSON.stringify(recordsSample)}
 
       Instructions:
-      1.  **statusColumnId**: Identify the single 'text' column that best represents a workflow status (e.g., 'status', 'progress', 'stage'). This column should have a limited number of repeating values (e.g., "To Do", "In Progress", "Done").
-      2.  **cardTitleColumnId**: Identify the single column that serves as the best title for a Kanban card. This is typically the primary identifier of the record, like a name, title, or task description.
-      3.  **cardDetailColumnIds**: Select 1 or 2 other columns that provide useful, concise context on the card. Good candidates are dates, assignees, or priority levels. Do not select the status or title column again.
+      1.  **statusColumnId**: Identify the single 'text' column that best represents a workflow status (e.g., 'status', 'progress', 'stage'). This column should have a limited number of repeating values that represent distinct stages.
+      2.  **statusColumnOrder**: After identifying the status column, find all of its unique values from the sample records. Return these unique values as an array of strings, sorted in a logical progression that makes sense for a workflow (e.g., from start to finish, like ["To Do", "In Progress", "Done"]).
+      3.  **cardTitleColumnId**: Identify the single column that serves as the best title for a Kanban card. This is typically the primary identifier of the record, like a name, title, or task description.
+      4.  **cardDetailColumnIds**: Select 1 or 2 other columns that provide useful, concise context on the card. Good candidates are dates, assignees, or priority levels. Do not select the status or title column again.
 
       Your response must be a single JSON object matching the required schema.
     `;

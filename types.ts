@@ -28,6 +28,7 @@ export interface KanbanConfig {
   statusColumnId: string;
   cardTitleColumnId: string;
   cardDetailColumnIds: string[];
+  statusColumnOrder: string[];
 }
 
 export interface ChatMessage {

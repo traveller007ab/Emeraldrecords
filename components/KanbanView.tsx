@@ -26,7 +26,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
             try {
                 const config = await generateKanbanConfig(schema, records);
                 // Basic validation
-                if (config && config.statusColumnId && config.cardTitleColumnId) {
+                if (config && config.statusColumnId && config.cardTitleColumnId && config.statusColumnOrder) {
                     setKanbanConfig(config);
                 } else {
                     throw new Error("Received invalid configuration from AI.");
@@ -44,21 +44,31 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
     const boardData = useMemo(() => {
         if (!kanbanConfig) return null;
         
-        const { statusColumnId } = kanbanConfig;
+        const { statusColumnId, statusColumnOrder } = kanbanConfig;
         
-        const columns: { [key: string]: Record[] } = {};
-        const statuses = new Set<string>();
+        const columns: { [key:string]: Record[] } = {};
+        const allStatuses = new Set<string>();
+        records.forEach(r => allStatuses.add(r[statusColumnId]?.toString() || 'Uncategorized'));
 
+        // Start with AI-provided order, filter to statuses that actually exist in the data
+        let orderedStatuses = (statusColumnOrder || []).filter(s => allStatuses.has(s));
+
+        // Add any remaining statuses from the data that weren't in the AI's list, and sort them
+        const remainingStatuses = Array.from(allStatuses).filter(s => !orderedStatuses.includes(s)).sort();
+        orderedStatuses = [...orderedStatuses, ...remainingStatuses];
+        
+        // Initialize columns based on the final ordered list
+        for (const status of orderedStatuses) {
+            columns[status] = [];
+        }
+        // Group records into the columns
         for (const record of records) {
             const status = record[statusColumnId]?.toString() || 'Uncategorized';
-            statuses.add(status);
-            if (!columns[status]) {
-                columns[status] = [];
+            // The status should always exist as a key in columns due to the logic above
+            if (columns[status]) {
+                columns[status].push(record);
             }
-            columns[status].push(record);
         }
-        
-        const orderedStatuses = Array.from(statuses).sort();
 
         return { columns, orderedStatuses };
 
@@ -135,7 +145,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ schema, records, onUpdateRecord
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, status)}
                 >
-                    <div className="p-4 border-b border-gray-700 sticky top-0 bg-gray-900 rounded-t-xl">
+                    <div className="p-4 border-b border-gray-700 sticky top-0 bg-gray-900 rounded-t-xl z-10">
                         <h3 className="font-semibold text-white capitalize flex items-center gap-2">
                             {status}
                             <span className="text-sm font-normal bg-gray-700 text-gray-300 rounded-full px-2 py-0.5">
