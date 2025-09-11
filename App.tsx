@@ -1,136 +1,58 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import LoginScreen from './components/LoginScreen';
-import DashboardScreen from './components/DashboardScreen';
+import DataWorkspace from './components/DataWorkspace';
 import * as apiService from './services/apiService';
 import { setSupabaseCredentials, clearSupabaseCredentials } from './services/supabaseClient';
-import type { System } from './types';
+import type { DatabaseSchema } from './types';
 import LogoIcon from './components/icons/LogoIcon';
 import Button from './components/common/Button';
-import SqlSetupScreen from './components/SqlSetupScreen';
-
-const createDefaultSystem = (): Omit<System, 'id' | 'created_at' | 'updated_at'> => ({
-  name: "New System",
-  type: "Default",
-  description: "A new system document to get you started.",
-  version: 1,
-  parent_version: null,
-  components: [],
-  logic: {
-    rules: [],
-    workflow: [],
-  },
-  calculations: {
-    math_engine: "sympy",
-    equations: [],
-    results: {},
-  },
-  diagram: {
-    nodes: [],
-    edges: [],
-  },
-  metadata: {
-    tags: ["new"],
-    domain: "other",
-    author: "AI Assistant",
-    notes: "Created automatically.",
-  },
-});
-
-const systemsTableSql = `-- 1. Create the table for your system document
-CREATE TABLE public.systems (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  name text NOT NULL,
-  type text,
-  description text,
-  version integer NOT NULL DEFAULT 1,
-  parent_version integer,
-  components jsonb,
-  logic jsonb,
-  calculations jsonb,
-  diagram jsonb,
-  metadata jsonb,
-  CONSTRAINT systems_pkey PRIMARY KEY (id)
-);
-
--- 2. Enable Row Level Security (RLS)
-ALTER TABLE public.systems ENABLE ROW LEVEL SECURITY;
-
--- 3. Create a policy to allow anon users to use the table.
--- For production apps, you'll want to restrict this to authenticated users.
-CREATE POLICY "Enable access for all anon users"
-ON public.systems
-FOR ALL
-TO anon
-USING (true)
-WITH CHECK (true);
-
--- 4. Create a trigger to automatically update the 'updated_at' timestamp on change
-CREATE OR REPLACE FUNCTION public.handle_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER on_systems_updated
-BEFORE UPDATE ON public.systems
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_updated_at();
-`;
+import SurveyScreen from './components/SurveyScreen';
+import SchemaSetupScreen from './components/SchemaSetupScreen';
+import { generateDatabaseSchema } from './services/geminiService';
 
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [systemDocument, setSystemDocument] = useState<System | null>(null);
+  const [userTables, setUserTables] = useState<string[]>([]);
+  
+  // State for the initial setup flow
   const [needsSetup, setNeedsSetup] = useState<boolean>(false);
+  const [isGeneratingSchema, setIsGeneratingSchema] = useState<boolean>(false);
+  const [setupInfo, setSetupInfo] = useState<{ tableName: string; schema: DatabaseSchema; sql: string; } | null>(null);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('emerald-isLoggedIn');
     clearSupabaseCredentials();
     setIsLoggedIn(false);
-    setSystemDocument(null);
+    setUserTables([]);
     setNeedsSetup(false);
+    setSetupInfo(null);
   }, []);
 
-  const loadSystem = useCallback(async () => {
+  const loadUserTables = useCallback(async () => {
     setIsLoading(true);
     setNeedsSetup(false);
+    setSetupInfo(null);
     try {
-        let doc = await apiService.getSystemDocument();
-        if (!doc) {
-            console.log("No document found, creating a default one.");
-            doc = await apiService.createSystemDocument(createDefaultSystem());
-        }
-        setSystemDocument(doc);
-    } catch (error: any) {
-        console.error("Failed to load or create system document:", error);
-        // Error codes for "undefined_table":
-        // "42P01" is the PostgreSQL code.
-        // "PGRST205" is what the user's log shows from Supabase.
-        // Also checking message content for robustness.
-        const isTableMissingError =
-          error?.code === '42P01' ||
-          error?.code === 'PGRST205' ||
-          (error?.message && (error.message.includes("does not exist") || error.message.includes("Could not find the table")));
-
-        if (isTableMissingError) {
-            console.log("'systems' table not found. Prompting user for setup.");
+        const tables = await apiService.listTables();
+        if (tables.length === 0) {
+            console.log("No user tables found. Starting setup flow.");
             setNeedsSetup(true);
         } else {
-            alert("Could not load your system document. Please check your Supabase connection and permissions.");
-            handleLogout();
+            setUserTables(tables);
         }
+    } catch (error: any) {
+        console.error("Failed to load user tables:", error);
+        alert("Could not connect to your Supabase project. Please check the credentials and network connection.");
+        handleLogout();
     } finally {
         setIsLoading(false);
     }
   }, [handleLogout]);
 
   useEffect(() => {
-    const loadInitialData = async () => {
+    const initializeApp = async () => {
       try {
         const savedIsLoggedIn = localStorage.getItem('emerald-isLoggedIn');
         const savedUrl = localStorage.getItem('emerald-supabaseUrl');
@@ -139,7 +61,7 @@ const App: React.FC = () => {
         if (savedIsLoggedIn === 'true' && savedUrl && savedKey) {
           setSupabaseCredentials(savedUrl, savedKey);
           setIsLoggedIn(true);
-          await loadSystem();
+          await loadUserTables();
         }
       } catch (error) {
         console.error("Failed to initialize:", error);
@@ -148,48 +70,79 @@ const App: React.FC = () => {
         setIsLoading(false);
       }
     };
-    loadInitialData();
-  }, [loadSystem, handleLogout]);
+    initializeApp();
+  }, [loadUserTables, handleLogout]);
 
   const handleLogin = (supabaseUrl: string, supabaseAnonKey: string) => {
     setSupabaseCredentials(supabaseUrl, supabaseAnonKey);
     localStorage.setItem('emerald-isLoggedIn', 'true');
     setIsLoggedIn(true);
-    loadSystem();
-  };
-
-  const handleSystemUpdate = async (updatedDocument: System) => {
-    // Optimistically update the UI
-    setSystemDocument(updatedDocument);
-    try {
-        await apiService.updateSystemDocument(updatedDocument.id, updatedDocument);
-    } catch (err) {
-        console.error("Failed to persist system update:", err);
-        alert("Failed to save changes to the database. Your last change might not be saved.");
-        // Optional: Add logic to revert to the previous state.
-        loadSystem(); 
-    }
+    loadUserTables();
   };
   
-  const handleResetSystem = async () => {
-      if (systemDocument && window.confirm("Are you sure you want to reset the system to its default state? This cannot be undone.")) {
-          setIsLoading(true);
-          const newDoc = createDefaultSystem();
-          try {
-            const updatedDoc = await apiService.updateSystemDocument(systemDocument.id, newDoc as Partial<System>);
-            setSystemDocument(updatedDoc);
-          } catch(err) {
-            alert("Failed to reset the system.");
-          } finally {
-            setIsLoading(false);
-          }
+  const handleGenerateSchema = async (occupation: string, dataType: string) => {
+      setIsGeneratingSchema(true);
+      try {
+          const result = await generateDatabaseSchema(occupation, dataType);
+          setSetupInfo(result);
+          setNeedsSetup(false);
+      } catch (err) {
+          console.error("Failed to generate schema:", err);
+          alert("Sorry, the AI could not generate a schema. Please try again with a different description.");
+      } finally {
+          setIsGeneratingSchema(false);
       }
   }
 
-  const handleCompleteSetup = useCallback(() => {
-    setNeedsSetup(false);
-    loadSystem();
-  }, [loadSystem]);
+  const handleCompleteSetup = useCallback(async () => {
+    if (!setupInfo) return;
+    setIsLoading(true);
+    try {
+      await apiService.runRawSql(setupInfo.sql);
+      // Success, reload tables which will move user to the workspace
+      await loadUserTables();
+    } catch (err) {
+      console.error("Failed to execute setup SQL:", err);
+      alert("Failed to create the table in your database. Please check the Supabase logs and try again.");
+      setIsLoading(false);
+    }
+  }, [setupInfo, loadUserTables]);
+
+
+  const renderContent = () => {
+    if (!isLoggedIn) {
+      return <LoginScreen onLogin={handleLogin} />;
+    }
+
+    if (setupInfo) {
+       return (
+        <SchemaSetupScreen
+            tableName={setupInfo.tableName}
+            sqlSchema={setupInfo.sql}
+            onConfirm={handleCompleteSetup}
+            onCancel={() => { setSetupInfo(null); setNeedsSetup(true); }}
+        />
+       )
+    }
+
+    if (needsSetup) {
+        return <SurveyScreen onSubmit={handleGenerateSchema} isLoading={isGeneratingSchema} />;
+    }
+    
+    if (userTables.length > 0) {
+        return <DataWorkspace tables={userTables} onLogout={handleLogout} />;
+    }
+
+    return (
+        <div className="min-h-screen w-full flex items-center justify-center p-4 text-center">
+            <div>
+                <h2 className="text-2xl font-bold text-red-400">Error Loading Workspace</h2>
+                <p className="text-slate-400 mt-2">Could not load your tables. Please check the console for errors.</p>
+                <Button onClick={handleLogout} className="mt-4">Logout</Button>
+            </div>
+        </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -201,30 +154,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {!isLoggedIn ? (
-        <LoginScreen onLogin={handleLogin} />
-      ) : needsSetup ? (
-        <SqlSetupScreen
-          tableName="systems"
-          sqlSchema={systemsTableSql}
-          onConfirm={handleCompleteSetup}
-        />
-      ) : systemDocument ? (
-        <DashboardScreen
-          systemDocument={systemDocument}
-          onSystemUpdate={handleSystemUpdate}
-          onLogout={handleLogout}
-          onResetSystem={handleResetSystem}
-        />
-      ) : (
-         <div className="min-h-screen w-full flex items-center justify-center p-4 text-center">
-            <div>
-                <h2 className="text-2xl font-bold text-red-400">Error Loading System</h2>
-                <p className="text-slate-400 mt-2">Could not load or create a system document. Please check the console for errors.</p>
-                <Button onClick={handleLogout} className="mt-4">Logout</Button>
-            </div>
-        </div>
-      )}
+      {renderContent()}
     </div>
   );
 };

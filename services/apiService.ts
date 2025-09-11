@@ -1,59 +1,123 @@
 import { getSupabaseClient } from './supabaseClient';
-import type { System } from '../types';
+import type { Record, DatabaseSchema, ColumnDefinition } from '../types';
 
-const TABLE_NAME = 'systems';
+const EXCLUDED_SCHEMAS = ['pg_catalog', 'information_schema', 'storage', 'graphql', 'graphql_public', 'realtime'];
 
-export const getSystemDocument = async (): Promise<System | null> => {
+export const listTables = async (): Promise<string[]> => {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*')
-        .limit(1)
-        .single();
+    const { data, error } = await supabase.rpc('list_all_tables');
 
     if (error) {
-        // "single()" returns this error code if no rows are found.
-        if (error.code === 'PGRST116') {
-            console.log('No system document found.');
-            return null;
+        console.error("Supabase listTables error:", error);
+        // Fallback for when the RPC is not created yet
+        if (error.message.includes('function public.list_all_tables() does not exist')) {
+            return [];
         }
-        console.error("Supabase getSystemDocument error:", error);
+        throw error;
+    }
+    return data
+        .filter((t: { schema: string }) => !EXCLUDED_SCHEMAS.includes(t.schema))
+        .map((t: { name: string }) => t.name);
+};
+
+
+export const getTableSchema = async (tableName: string): Promise<DatabaseSchema> => {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_table_schema', { table_name_arg: tableName });
+
+    if (error) {
+        console.error("Supabase getTableSchema error:", error);
+        throw error;
+    }
+    
+    // Map the RPC result to our ColumnDefinition type
+    return data.map((col: any): ColumnDefinition => ({
+        id: col.column_name,
+        name: col.column_name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Prettify name
+        type: mapPostgresTypeToAppType(col.data_type),
+    }));
+};
+
+const mapPostgresTypeToAppType = (postgresType: string): ColumnDefinition['type'] => {
+    switch(postgresType) {
+        case 'text':
+        case 'character varying':
+            return 'string';
+        case 'integer':
+        case 'bigint':
+        case 'numeric':
+            return 'number';
+        case 'boolean':
+            return 'boolean';
+        case 'timestamp with time zone':
+        case 'date':
+            return 'date';
+        default:
+            return 'string';
+    }
+}
+
+
+export const getRecords = async (tableName: string): Promise<Record[]> => {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error(`Supabase getRecords for ${tableName} error:`, error);
         throw error;
     }
     return data;
 };
 
-export const updateSystemDocument = async (systemId: string, updates: Partial<Omit<System, 'id'>>): Promise<System> => {
+export const createRecord = async (tableName: string, newRecord: Omit<Record, 'id' | 'created_at'>): Promise<Record> => {
     const supabase = getSupabaseClient();
-    
-    const { created_at, ...updateData } = updates;
-
     const { data, error } = await supabase
-        .from(TABLE_NAME)
-        .update(updateData)
-        .eq('id', systemId)
+        .from(tableName)
+        .insert(newRecord)
         .select()
         .single();
-
     if (error) {
-        console.error("Supabase updateSystemDocument error:", error);
+        console.error(`Supabase createRecord for ${tableName} error:`, error);
+        throw error;
+    }
+    return data;
+}
+
+export const updateRecord = async (tableName: string, recordId: string, updates: Partial<Omit<Record, 'id'>>): Promise<Record> => {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+        .from(tableName)
+        .update(updates)
+        .eq('id', recordId)
+        .select()
+        .single();
+    if (error) {
+        console.error(`Supabase updateRecord for ${tableName} error:`, error);
         throw error;
     }
     return data;
 };
 
-export const createSystemDocument = async (newSystem: Omit<System, 'id' | 'created_at' | 'updated_at'>): Promise<System> => {
+export const deleteRecord = async (tableName: string, recordId: string): Promise<void> => {
     const supabase = getSupabaseClient();
-
-    const { data, error } = await supabase
-        .from(TABLE_NAME)
-        .insert(newSystem)
-        .select()
-        .single();
-    
+    const { error } = await supabase
+        .from(tableName)
+        .delete()
+        .eq('id', recordId);
     if (error) {
-        console.error("Supabase createSystemDocument error:", error);
+        console.error(`Supabase deleteRecord for ${tableName} error:`, error);
         throw error;
     }
-    return data;
+};
+
+export const runRawSql = async (sql: string): Promise<void> => {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('execute_sql', { sql_query: sql });
+    if (error) {
+        console.error("Supabase runRawSql error:", error);
+        throw error;
+    }
 }

@@ -1,8 +1,7 @@
-import type { System, ChatMessage, ToolCallPayload, DatabaseSchema, Record, ChartConfig, KanbanConfig } from '../types';
+import type { ChatMessage, ToolCallPayload, DatabaseSchema, Record, ChartConfig, KanbanConfig, GeneratedSchema } from '../types';
 
 interface ApiRequestBody {
-    // FIX: Add new actions to support Analytics and Kanban views
-    action: 'getAiResponse' | 'generateChartAnalytics' | 'generateKanbanConfig';
+    action: 'getAiResponse' | 'generateDatabaseSchema' | 'generateChartAnalytics' | 'generateKanbanConfig';
     payload: any;
 }
 
@@ -29,13 +28,17 @@ async function fetchFromApi<T>(action: ApiRequestBody['action'], payload: any): 
 }
 
 export const getAiResponse = async (
-    systemDocument: System,
+    tableName: string,
+    schema: DatabaseSchema,
     chatHistory: ChatMessage[]
 ): Promise<{ text?: string, toolCall?: ToolCallPayload }> => {
-    return fetchFromApi('getAiResponse', { systemDocument, chatHistory });
+    return fetchFromApi('getAiResponse', { tableName, schema, chatHistory });
 };
 
-// FIX: Add missing service functions for Analytics and Kanban views
+export const generateDatabaseSchema = async (occupation: string, dataType: string): Promise<GeneratedSchema> => {
+    return fetchFromApi('generateDatabaseSchema', { occupation, dataType });
+};
+
 export const generateChartAnalytics = async (schema: DatabaseSchema, records: Record[]): Promise<ChartConfig> => {
     return fetchFromApi('generateChartAnalytics', { schema, records });
 };

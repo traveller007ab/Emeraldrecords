@@ -1,107 +1,80 @@
-// FIX: Use the correct package name '@google/genai' as per the guidelines
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Handler } from '@netlify/functions';
-// FIX: Import missing types
-import type { System, ChatMessage, DatabaseSchema, Record } from '../types';
+import type { ChatMessage, DatabaseSchema, Record, ColumnDefinition } from '../types';
 
-// Securely read the API key from environment variables on the server.
 const apiKey = process.env.API_KEY;
 if (!apiKey) {
-  // This error will be visible in the Netlify function logs if the key is not set.
   throw new Error("API_KEY environment variable not set");
 }
 
 const ai = new GoogleGenAI({ apiKey });
 
-// --- Schema definition for the `updateSystem` tool ---
-const systemToolSchema = {
-    type: Type.OBJECT,
-    properties: {
-        updatedSystem: {
-            type: Type.OBJECT,
-            description: "The complete, modified system object. You must provide the entire object, not just the changed parts.",
-            properties: {
-                name: { type: Type.STRING, description: "The name of the system." },
-                type: { type: Type.STRING, description: "The type of system." },
-                description: { type: Type.STRING },
-                version: { type: Type.NUMBER, description: "Increment the version number for each change." },
-                parent_version: { type: Type.NUMBER, description: "The version number this change is based on." },
-                components: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            id: { type: Type.STRING, description: "A unique identifier for the component, e.g., 'comp-uuid-1'." },
-                            name: { type: Type.STRING },
-                            category: { type: Type.STRING, description: "Must be 'core', 'subcore', or 'auxiliary'." },
-                            attributes: { type: Type.OBJECT, description: "A key-value map of component attributes." },
-                            connections: { type: Type.ARRAY, items: { type: Type.STRING }, description: "An array of component IDs it connects to." }
-                        }
-                    }
-                },
-                logic: {
-                    type: Type.OBJECT,
-                    properties: {
-                        rules: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        workflow: { type: Type.ARRAY, items: { type: Type.OBJECT } }
-                    }
-                },
-                calculations: {
-                    type: Type.OBJECT,
-                    properties: {
-                        math_engine: { type: Type.STRING },
-                        equations: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        results: { type: Type.OBJECT }
-                    }
-                },
-                diagram: {
-                    type: Type.OBJECT,
-                    properties: {
-                        nodes: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    id: { type: Type.STRING },
-                                    x: { type: Type.NUMBER },
-                                    y: { type: Type.NUMBER },
-                                    label: { type: Type.STRING }
-                                }
-                            }
-                        },
-                        edges: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    from: { type: Type.STRING },
-                                    to: { type: Type.STRING },
-                                    type: { type: Type.STRING }
-                                }
-                            }
-                        }
-                    }
-                },
-                metadata: {
-                    type: Type.OBJECT,
-                    properties: {
-                        tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        domain: { type: Type.STRING, description: "Must be one of: 'engineering', 'finance', 'ai', 'trading', 'design', 'other'." },
-                        author: { type: Type.STRING },
-                        notes: { type: Type.STRING }
-                    }
-                }
-            }
-        },
-        confirmationMessage: {
-            type: Type.STRING,
-            description: "A clear, user-friendly message asking the user to confirm the proposed change. E.g., 'It looks like you want to add a new 'Boiler' component. Is that correct?'"
-        }
-    },
-    required: ["updatedSystem", "confirmationMessage"]
+// Maps our app's data types to the types Gemini understands for schema definitions
+const mapTypeToGemini = (type: ColumnDefinition['type']): Type => {
+    switch(type) {
+        case 'number': return Type.NUMBER;
+        case 'boolean': return Type.BOOLEAN;
+        case 'date':
+        case 'select':
+        case 'string':
+        default:
+            return Type.STRING;
+    }
 };
 
-// --- Handler for incoming requests from the frontend ---
+// Dynamically builds a tool schema for Gemini based on the database table's schema
+const buildTools = (schema: DatabaseSchema) => {
+    const recordProperties = schema.reduce((acc, col) => {
+        // Exclude read-only fields from create/update tools
+        if (col.id !== 'id' && col.id !== 'created_at') {
+            acc[col.id] = { type: mapTypeToGemini(col.type), description: col.name };
+        }
+        return acc;
+    }, {} as { [key: string]: { type: Type, description: string } });
+
+    return [{
+        functionDeclarations: [
+            {
+                name: "createRecord",
+                description: "Creates a new record in the table.",
+                parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                        record: { type: Type.OBJECT, properties: recordProperties },
+                        confirmationMessage: { type: Type.STRING, description: "A message confirming the action to the user." }
+                    },
+                    required: ["record", "confirmationMessage"]
+                },
+            },
+            {
+                name: "updateRecord",
+                description: "Updates an existing record in the table using its ID.",
+                parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                        recordId: { type: Type.STRING, description: "The ID of the record to update." },
+                        record: { type: Type.OBJECT, description: "An object with the fields to update.", properties: recordProperties },
+                        confirmationMessage: { type: Type.STRING, description: "A message confirming the action to the user." }
+                    },
+                    required: ["recordId", "record", "confirmationMessage"]
+                },
+            },
+            {
+                name: "deleteRecord",
+                description: "Deletes a record from the table using its ID.",
+                parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                        recordId: { type: Type.STRING, description: "The ID of the record to delete." },
+                        confirmationMessage: { type: Type.STRING, description: "A message confirming the action to the user." }
+                    },
+                    required: ["recordId", "confirmationMessage"]
+                },
+            },
+        ]
+    }];
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -116,7 +89,8 @@ export const handler: Handler = async (event) => {
     switch (action) {
       case 'getAiResponse':
         return handleAiResponse(payload);
-      // FIX: Add handlers for new actions
+      case 'generateDatabaseSchema':
+        return handleGenerateDatabaseSchema(payload);
       case 'generateChartAnalytics':
         return handleGenerateChartAnalytics(payload);
       case 'generateKanbanConfig':
@@ -131,47 +105,34 @@ export const handler: Handler = async (event) => {
   }
 };
 
-async function handleAiResponse({ systemDocument, chatHistory }: { systemDocument: System, chatHistory: ChatMessage[] }) {
+async function handleAiResponse({ tableName, schema, chatHistory }: { tableName: string, schema: DatabaseSchema, chatHistory: ChatMessage[] }) {
     
-    const tools = [{
-        functionDeclarations: [{
-            name: "updateSystem",
-            description: "Modifies the system document based on the user's request. Always increment the version number.",
-            parameters: systemToolSchema,
-        }]
-    }];
+    const tools = buildTools(schema);
 
     const systemInstruction = `
-        You are an AI system architect. Your goal is to help the user model a complex system by modifying a JSON document.
-        The user will describe a change, and you will call the 'updateSystem' function with the new, complete JSON object.
+        You are an AI assistant that helps users manage their data in a table named "${tableName}".
+        The user will describe a change, and you will call the appropriate function ('createRecord', 'updateRecord', 'deleteRecord').
 
         **Core Rules:**
-        1.  **Full Document Update**: You MUST provide the entire, updated system document in the 'updatedSystem' argument. Do not provide only the changed parts.
-        2.  **Immutability**: Treat the input JSON as immutable. Generate a new version of it with the requested modifications.
-        3.  **Version Increment**: You MUST increment the 'version' number by 1 for every change. The 'parent_version' should be the version number from the input document.
-        4.  **ID Generation**: For new components or diagram nodes, you MUST generate a new, unique, and descriptive ID (e.g., 'comp-boiler-1', 'node-turbine').
-        5.  **Confirmation**: You MUST create a clear, concise confirmation message for the user.
-        6.  **Clarification**: If the user's request is ambiguous, do not call the tool. Instead, ask clarifying questions as a text response.
-        7.  **Preserve Data**: Do not delete or alter parts of the JSON that the user did not ask to change.
+        1.  **Tool Use**: You MUST use the provided tools to perform any data modification. Do not just respond with text.
+        2.  **Confirmation**: You MUST create a clear, concise confirmation message for the user for every tool call.
+        3.  **Clarification**: If the user's request is ambiguous (e.g., they ask to delete a record without specifying an ID), ask clarifying questions instead of calling a tool.
+        4.  **Schema Adherence**: The data you provide in tool calls MUST match the schema.
         
-        The user's current system document is:
-        ${JSON.stringify(systemDocument)}
+        The schema for the "${tableName}" table is:
+        ${JSON.stringify(schema, null, 2)}
     `;
 
-    // FIX: Map chat history to the format expected by the Gemini API
     const contents = chatHistory.map(msg => ({
         role: msg.role,
         parts: [{ text: msg.content }],
     }));
 
+    // FIX: Moved `tools` into the `config` object.
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents,
-        config: {
-            systemInstruction,
-            temperature: 0.1,
-        },
-        tools,
+        config: { systemInstruction, temperature: 0.1, tools },
     });
     
     let resultBody: { text?: string; toolCall?: any } = {};
@@ -196,7 +157,97 @@ async function handleAiResponse({ systemDocument, chatHistory }: { systemDocumen
     };
 }
 
-// FIX: Add handler for generating chart analytics
+
+async function handleGenerateDatabaseSchema({ occupation, dataType }: { occupation: string, dataType: string }) {
+    const schemaDefinition = {
+        type: Type.OBJECT,
+        properties: {
+            tableName: { type: Type.STRING, description: "A simple, plural, lowercase table name derived from the data type (e.g., 'tasks', 'clients', 'properties')." },
+            schema: {
+                type: Type.ARRAY,
+                description: "The array of column definitions for the table.",
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        id: { type: Type.STRING, description: "The lowercase, snake_case column name (e.g., 'client_name', 'due_date')." },
+                        name: { type: Type.STRING, description: "A user-friendly, title-cased name (e.g., 'Client Name', 'Due Date')." },
+                        type: { type: Type.STRING, description: "The data type. Must be one of: 'string', 'number', 'boolean', 'date', 'select'." },
+                        options: { type: Type.ARRAY, description: "If type is 'select', provide an array of string options.", items: { type: Type.STRING } }
+                    }
+                }
+            },
+            sql: { type: Type.STRING, description: "The full PostgreSQL CREATE TABLE statement and all associated policies and helper functions." }
+        },
+        required: ["tableName", "schema", "sql"]
+    };
+
+    const prompt = `
+        Design a database table for a ${occupation} who needs to manage ${dataType}.
+
+        **Requirements:**
+        1.  **Table Name**: Generate a simple, plural, lowercase table name (e.g., 'tasks', 'clients').
+        2.  **Columns**:
+            *   Include an 'id' column: \`id uuid NOT NULL DEFAULT gen_random_uuid()\`.
+            *   Include a 'created_at' column: \`created_at timestamp with time zone NOT NULL DEFAULT now()\`.
+            *   Create 5-7 other relevant columns based on the user's needs. Use appropriate PostgreSQL types (text, int, numeric, boolean, date).
+            *   For columns that represent a status, stage, or category, suggest 3-5 sensible default options.
+        3.  **Schema JSON**: Create a JSON array of column definitions matching the specified schema format.
+        4.  **SQL Generation**: Generate a complete PostgreSQL script that does the following in order:
+            *   Creates the table with the defined columns and sets the primary key on the 'id'.
+            *   Enables Row Level Security (RLS) on the table.
+            *   Creates a permissive policy that allows anonymous users full access. Name it "Enable access for anon users".
+            *   Creates the three required helper functions for the application to interact with the database.
+
+        **Helper Functions SQL:**
+        \`\`\`sql
+        -- Helper 1: Function to execute raw SQL (needed for table creation)
+        CREATE OR REPLACE FUNCTION public.execute_sql(sql_query text)
+        RETURNS void LANGUAGE plpgsql AS $$
+        BEGIN
+          EXECUTE sql_query;
+        END;
+        $$;
+        
+        -- Helper 2: Function to list all user-created tables
+        CREATE OR REPLACE FUNCTION public.list_all_tables()
+        RETURNS TABLE(schema text, name text)
+        LANGUAGE sql AS $$
+          SELECT table_schema, table_name
+          FROM information_schema.tables
+          WHERE table_schema NOT IN ('pg_catalog', 'information_schema') AND table_type = 'BASE TABLE';
+        $$;
+
+        -- Helper 3: Function to get the schema of a specific table
+        CREATE OR REPLACE FUNCTION public.get_table_schema(table_name_arg text)
+        RETURNS TABLE(column_name text, data_type text)
+        LANGUAGE sql AS $$
+          SELECT column_name, data_type
+          FROM information_schema.columns
+          WHERE table_name = table_name_arg;
+        $$;
+        \`\`\`
+    `;
+
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: schemaDefinition,
+            temperature: 0.2,
+        },
+    });
+
+    const result = JSON.parse(response.text);
+
+    return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result),
+    };
+}
+
+
 async function handleGenerateChartAnalytics({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
     const chartConfigSchema = {
         type: Type.OBJECT,
@@ -239,7 +290,6 @@ async function handleGenerateChartAnalytics({ schema, records }: { schema: Datab
     };
 }
 
-// FIX: Add handler for generating Kanban board configuration
 async function handleGenerateKanbanConfig({ schema, records }: { schema: DatabaseSchema, records: Record[] }) {
     const kanbanConfigSchema = {
         type: Type.OBJECT,

@@ -1,22 +1,21 @@
-import React, { useState } from 'react';
-import type { System, Component, Diagram } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { DatabaseSchema, Record } from '../types';
 import Button from './common/Button';
 import AiChatAssistant from './AiChatAssistant';
 import LogoIcon from './icons/LogoIcon';
 import LogoutIcon from './icons/LogoutIcon';
-import ResetIcon from './icons/ResetIcon';
-import EditIcon from './icons/EditIcon';
-import DeleteIcon from './icons/DeleteIcon';
-import DiagramIcon from './icons/DiagramIcon';
 import TableIcon from './icons/TableIcon';
-import JsonIcon from './icons/JsonIcon';
+import KanbanIcon from './icons/KanbanIcon';
+import AnalyticsIcon from './icons/AnalyticsIcon';
+import TableView from './TableView';
+import KanbanView from './KanbanView';
+import AnalyticsView from './AnalyticsView';
+import * as apiService from '../services/apiService';
+import Spinner from './common/Spinner';
 
-
-interface DashboardScreenProps {
-  systemDocument: System;
-  onSystemUpdate: (updatedDocument: System) => void;
+interface DataWorkspaceProps {
+  tables: string[];
   onLogout: () => void;
-  onResetSystem: () => void;
 }
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
@@ -32,152 +31,101 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
   </button>
 );
 
-const StructuredView: React.FC<{ document: System }> = ({ document }) => (
-    <div className="space-y-6">
-        <div>
-            <h3 className="text-lg font-semibold text-white border-b border-slate-700 pb-2 mb-3">Metadata</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                    <p className="text-slate-400">Author</p>
-                    <p className="font-medium text-slate-200">{document.metadata.author}</p>
-                </div>
-                 <div>
-                    <p className="text-slate-400">Domain</p>
-                    <p className="font-medium text-slate-200 capitalize">{document.metadata.domain}</p>
-                </div>
-                 <div>
-                    <p className="text-slate-400">Version</p>
-                    <p className="font-medium text-slate-200">{document.version}</p>
-                </div>
-                 <div>
-                    <p className="text-slate-400">Tags</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                        {document.metadata.tags.map(tag => (
-                            <span key={tag} className="bg-emerald-900 text-emerald-300 text-xs font-medium px-2 py-0.5 rounded-full">{tag}</span>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-         <div>
-            <h3 className="text-lg font-semibold text-white border-b border-slate-700 pb-2 mb-3">Components</h3>
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-slate-300">
-                    <thead className="text-xs text-slate-400 uppercase bg-slate-700/50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3">Name</th>
-                            <th scope="col" className="px-6 py-3">Category</th>
-                            <th scope="col" className="px-6 py-3">Connections</th>
-                            <th scope="col" className="px-6 py-3">Attributes</th>
-                            <th scope="col" className="px-6 py-3"><span className="sr-only">Actions</span></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {document.components.map((comp: Component) => (
-                            <tr key={comp.id} className="border-b border-slate-700 hover:bg-slate-700/30">
-                                <th scope="row" className="px-6 py-4 font-medium text-white whitespace-nowrap">{comp.name}</th>
-                                <td className="px-6 py-4 capitalize">{comp.category}</td>
-                                <td className="px-6 py-4">{comp.connections.join(', ') || 'None'}</td>
-                                <td className="px-6 py-4 font-mono text-xs">{Object.keys(comp.attributes).length > 0 ? JSON.stringify(comp.attributes) : 'None'}</td>
-                                <td className="px-6 py-4 text-right">
-                                    <button className="p-1 text-slate-400 hover:text-white"><EditIcon className="w-4 h-4" /></button>
-                                    <button className="p-1 text-slate-400 hover:text-red-400"><DeleteIcon className="w-4 h-4" /></button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                 {document.components.length === 0 && (
-                    <p className="text-center py-8 text-slate-500">No components defined in the system.</p>
-                )}
-            </div>
-        </div>
-    </div>
-);
 
-const DiagramView: React.FC<{ diagram: Diagram }> = ({ diagram }) => {
-    if (!diagram || diagram.nodes.length === 0) {
-        return <div className="text-center py-16 text-slate-500">No diagram data available to display.</div>;
-    }
-
-    const PADDING = 50;
-    const nodeRadius = 20;
-
-    const allX = diagram.nodes.map(n => n.x);
-    const allY = diagram.nodes.map(n => n.y);
-
-    const minX = Math.min(...allX) - PADDING;
-    const minY = Math.min(...allY) - PADDING;
-    const width = Math.max(...allX) - minX + PADDING;
-    const height = Math.max(...allY) - minY + PADDING;
-    
-    const nodeMap = new Map(diagram.nodes.map(node => [node.id, node]));
-
-    return (
-        <div className="w-full h-full bg-slate-900/50 rounded-lg p-4 border border-slate-700">
-             <svg viewBox={`${minX} ${minY} ${width} ${height}`} className="w-full h-[500px]">
-                <defs>
-                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
-                        <polygon points="0 0, 10 3.5, 0 7" fill="#059669" />
-                    </marker>
-                </defs>
-                {diagram.edges.map((edge, i) => {
-                    const fromNode = nodeMap.get(edge.from);
-                    const toNode = nodeMap.get(edge.to);
-                    if (!fromNode || !toNode) return null;
-                    
-                    const dx = toNode.x - fromNode.x;
-                    const dy = toNode.y - fromNode.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    const nx = dx / dist;
-                    const ny = dy / dist;
-                    const targetX = toNode.x - nx * (nodeRadius + 2); // offset for arrowhead
-                    const targetY = toNode.y - ny * (nodeRadius + 2);
-
-                    return (
-                        <line 
-                            key={i}
-                            x1={fromNode.x} y1={fromNode.y}
-                            x2={targetX} y2={targetY}
-                            stroke="#059669" strokeWidth="2"
-                            markerEnd="url(#arrowhead)"
-                        />
-                    );
-                })}
-                {diagram.nodes.map(node => (
-                    <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
-                        <circle r={nodeRadius} fill="#0d9488" stroke="#6ee7b7" strokeWidth="2" />
-                        <text
-                            textAnchor="middle" y={nodeRadius + 15}
-                            fill="#f1f5f9" fontSize="10" fontWeight="bold"
-                            className="pointer-events-none"
-                        >
-                            {node.label}
-                        </text>
-                    </g>
-                ))}
-            </svg>
-        </div>
-    );
-};
-
-
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ systemDocument, onSystemUpdate, onLogout, onResetSystem }) => {
+const DataWorkspace: React.FC<DataWorkspaceProps> = ({ tables, onLogout }) => {
   const [isChatOpen, setIsChatOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('structured');
+  const [activeTab, setActiveTab] = useState('table');
+  const [selectedTable, setSelectedTable] = useState<string>(tables[0]);
+  const [schema, setSchema] = useState<DatabaseSchema | null>(null);
+  const [records, setRecords] = useState<Record[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!selectedTable) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+        const [fetchedSchema, fetchedRecords] = await Promise.all([
+            apiService.getTableSchema(selectedTable),
+            apiService.getRecords(selectedTable),
+        ]);
+        setSchema(fetchedSchema);
+        setRecords(fetchedRecords);
+    } catch(err) {
+        console.error(`Failed to fetch data for table ${selectedTable}:`, err);
+        setError(`Could not load data for table "${selectedTable}". Please check permissions and try again.`);
+    } finally {
+        setIsLoading(false);
+    }
+  }, [selectedTable]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleUpdateRecord = async (recordId: string, updates: Partial<Omit<Record, 'id'>>) => {
+    // Optimistic update
+    setRecords(prev => prev.map(r => r.id === recordId ? { ...r, ...updates } : r));
+    try {
+        await apiService.updateRecord(selectedTable, recordId, updates);
+    } catch (err) {
+        console.error("Failed to update record:", err);
+        alert("Failed to save changes to the database.");
+        fetchData(); // Revert on failure
+    }
+  };
+
+  const handleCreateRecord = async (newRecord: Omit<Record, 'id' | 'created_at'>) => {
+    try {
+        const created = await apiService.createRecord(selectedTable, newRecord);
+        setRecords(prev => [created, ...prev]);
+    } catch (err) {
+        console.error("Failed to create record:", err);
+        alert("Failed to create the new record in the database.");
+    }
+  };
+
+  const handleDeleteRecord = async (recordId: string) => {
+    if (!window.confirm("Are you sure you want to delete this record?")) return;
+    // Optimistic delete
+    const originalRecords = records;
+    setRecords(prev => prev.filter(r => r.id !== recordId));
+    try {
+        // FIX: Changed record_id to recordId to match the parameter name.
+        await apiService.deleteRecord(selectedTable, recordId);
+    } catch (err) {
+        console.error("Failed to delete record:", err);
+        alert("Failed to delete the record from the database.");
+        setRecords(originalRecords); // Revert on failure
+    }
+  }
+
 
   const renderContent = () => {
+    if (isLoading) {
+        return <div className="flex items-center justify-center p-16"><Spinner /></div>;
+    }
+    if (error) {
+        return <div className="text-center p-16 text-red-400">{error}</div>;
+    }
+    if (!schema) {
+        return <div className="text-center p-16 text-slate-400">Could not load table schema.</div>;
+    }
+
     switch (activeTab) {
-      case 'structured':
-        return <StructuredView document={systemDocument} />;
-      case 'diagram':
-        return <DiagramView diagram={systemDocument.diagram} />;
-      case 'raw':
-        return (
-          <pre className="bg-slate-900/70 p-4 rounded-lg text-xs text-slate-300 whitespace-pre-wrap">
-            <code>{JSON.stringify(systemDocument, null, 2)}</code>
-          </pre>
-        );
+      case 'table':
+        return <TableView 
+            schema={schema} 
+            records={records}
+            onUpdateRecord={handleUpdateRecord}
+            onCreateRecord={handleCreateRecord}
+            onDeleteRecord={handleDeleteRecord}
+        />;
+      case 'kanban':
+        return <KanbanView schema={schema} records={records} onUpdateRecord={handleUpdateRecord} />;
+      case 'analytics':
+        return <AnalyticsView schema={schema} records={records} />;
       default:
         return null;
     }
@@ -189,14 +137,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ systemDocument, onSys
         <div className="flex items-center space-x-3">
           <LogoIcon className="h-10 w-10 text-emerald-500" />
           <div>
-            <h1 className="text-2xl font-bold text-white">{systemDocument.name}</h1>
-            <p className="text-sm text-slate-400 capitalize">{systemDocument.description}</p>
+             <select 
+                value={selectedTable}
+                onChange={e => setSelectedTable(e.target.value)}
+                className="text-2xl font-bold text-white bg-transparent focus:outline-none"
+             >
+                {tables.map(table => <option key={table} value={table} className="bg-slate-800 font-bold">{table}</option>)}
+             </select>
+            <p className="text-sm text-slate-400 capitalize">Your AI-powered data workspace.</p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
-           <Button onClick={onResetSystem} variant="secondary" size="sm">
-             <ResetIcon className="h-4 w-4 mr-2" /> Reset System
-           </Button>
            <Button onClick={onLogout} variant="secondary" size="sm">
              <LogoutIcon className="h-4 w-4 mr-2" /> Logout
            </Button>
@@ -204,14 +155,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ systemDocument, onSys
       </header>
 
       <div className="flex items-center border-b border-slate-700 mb-6">
-        <TabButton active={activeTab === 'structured'} onClick={() => setActiveTab('structured')}>
-            <TableIcon className="h-5 w-5" /> Structured View
+        <TabButton active={activeTab === 'table'} onClick={() => setActiveTab('table')}>
+            <TableIcon className="h-5 w-5" /> Table View
         </TabButton>
-        <TabButton active={activeTab === 'diagram'} onClick={() => setActiveTab('diagram')}>
-            <DiagramIcon className="h-5 w-5" /> Diagram View
+        <TabButton active={activeTab === 'kanban'} onClick={() => setActiveTab('kanban')}>
+            <KanbanIcon className="h-5 w-5" /> Kanban View
         </TabButton>
-        <TabButton active={activeTab === 'raw'} onClick={() => setActiveTab('raw')}>
-            <JsonIcon className="h-5 w-5" /> Raw JSON
+        <TabButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')}>
+            <AnalyticsIcon className="h-5 w-5" /> Analytics
         </TabButton>
       </div>
 
@@ -225,15 +176,18 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ systemDocument, onSys
             </div>
        </div>
 
-       {isChatOpen && (
+       {isChatOpen && schema && (
         <AiChatAssistant
-          systemDocument={systemDocument}
+          tableName={selectedTable}
+          schema={schema}
           onClose={() => setIsChatOpen(false)}
-          onSystemUpdate={onSystemUpdate}
+          onCreateRecord={handleCreateRecord}
+          onUpdateRecord={handleUpdateRecord}
+          onDeleteRecord={handleDeleteRecord}
         />
        )}
     </div>
   );
 };
 
-export default DashboardScreen;
+export default DataWorkspace;

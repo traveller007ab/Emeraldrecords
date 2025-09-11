@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { System, ChatMessage, ToolCallPayload } from '../types';
+import type { DatabaseSchema, ChatMessage, ToolCallPayload, Record } from '../types';
 import { getAiResponse } from '../services/geminiService';
 import Button from './common/Button';
 import Input from './common/Input';
@@ -10,14 +10,17 @@ import LogoIcon from './icons/LogoIcon';
 import CheckIcon from './icons/CheckIcon';
 
 interface AiChatAssistantProps {
-  systemDocument: System;
+  tableName: string;
+  schema: DatabaseSchema;
   onClose: () => void;
-  onSystemUpdate: (updatedDocument: System) => void;
+  onCreateRecord: (newRecord: Omit<Record, 'id' | 'created_at'>) => void;
+  onUpdateRecord: (recordId: string, updates: Partial<Omit<Record, 'id'>>) => void;
+  onDeleteRecord: (recordId: string) => void;
 }
 
-const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ systemDocument, onClose, onSystemUpdate }) => {
+const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ tableName, schema, onClose, onCreateRecord, onUpdateRecord, onDeleteRecord }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'model', content: "Hello! I am your AI system architect. Describe the changes you want to make to your system document. \n\nFor example, try: 'Add a new component named Boiler with core category' or 'Create a diagram node for the new boiler'." }
+    { role: 'model', content: `Hello! I can help you manage your "${tableName}" table. \n\nFor example, try: 'Add a new record' or 'Delete the record with ID 5'.` }
   ]);
   const [userInput, setUserInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +41,7 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ systemDocument, onClo
     setIsLoading(true);
 
     try {
-      const response = await getAiResponse(systemDocument, newHistory);
+      const response = await getAiResponse(tableName, schema, newHistory);
       
       const toolCall = response.toolCall;
       const textResponse = response.text;
@@ -70,21 +73,27 @@ const AiChatAssistant: React.FC<AiChatAssistantProps> = ({ systemDocument, onClo
     const { name, args } = pendingToolCall;
     
     try {
-      if (name === 'updateSystem') {
-          // Merge the existing document with the AI's update to prevent data loss
-          // if the AI returns a partial object.
-          const finalSystem = {
-              ...systemDocument,
-              ...args.updatedSystem,
-              id: systemDocument.id,
-              created_at: systemDocument.created_at,
-          };
-          onSystemUpdate(finalSystem);
-      } else {
-        console.error(`Unknown tool call name: ${name}`);
-        throw new Error("Unknown action requested.");
+      switch(name) {
+          case 'createRecord':
+              if (args.record) {
+                onCreateRecord(args.record);
+              } else { throw new Error("Missing record data for creation."); }
+              break;
+          case 'updateRecord':
+              if (args.recordId && args.record) {
+                onUpdateRecord(args.recordId, args.record);
+              } else { throw new Error("Missing record ID or update data."); }
+              break;
+          case 'deleteRecord':
+              if (args.recordId) {
+                onDeleteRecord(args.recordId);
+              } else { throw new Error("Missing record ID for deletion."); }
+              break;
+          default:
+              console.error(`Unknown tool call name: ${name}`);
+              throw new Error("Unknown action requested.");
       }
-      setMessages(prev => [...prev, { role: 'model', content: "Done. I've updated the system document." }]);
+      setMessages(prev => [...prev, { role: 'model', content: "Done. I've performed the action." }]);
     } catch (err) {
       console.error(err)
       setMessages(prev => [...prev, { role: 'model', content: "It looks like there was an error performing that action." }]);
