@@ -48,7 +48,9 @@ const App: React.FC = () => {
         }
     } catch (error: any) {
         console.error("Failed to load user tables:", error);
-        if (error?.message?.includes('function') && error?.message?.includes('does not exist')) {
+        // The error code PGRST202 specifically indicates a missing RPC function in Supabase.
+        // This is a more reliable check than parsing the error message.
+        if (error?.code === 'PGRST202' || (error?.message?.includes('function') && error?.message?.includes('does not exist'))) {
             console.warn("Helper functions appear to be missing. Starting function setup flow.");
             setNeedsFunctionsSetup(true);
         } else {
